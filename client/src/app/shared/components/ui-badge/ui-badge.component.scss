@@ -1,0 +1,35 @@
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  white-space: nowrap;
+
+  &--accent {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--accent-soft);
+  }
+
+  &--success {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(74, 222, 128, 0.12);
+  }
+
+  &--warning {
+    border-color: var(--warning);
+    color: var(--warning);
+    background: rgba(251, 191, 36, 0.12);
+  }
+
+  &--danger {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(248, 113, 113, 0.12);
+  }
+}

@@ -1,0 +1,97 @@
+.host {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.host__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.host__status {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.host__invite-label {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+
+.host__invite-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  code {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-app);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    overflow-x: auto;
+  }
+}
+
+.host__body {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 20px;
+
+  h3 {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+}
+
+.host__step-title {
+  color: var(--info);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.host__step-config {
+  background: var(--bg-app);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.host__hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.host__players {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-app);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+  }
+
+  strong {
+    color: var(--success);
+  }
+}

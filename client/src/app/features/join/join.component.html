@@ -1,0 +1,25 @@
+<div class="join-page">
+  <app-ui-card>
+    @if (error(); as message) {
+      <p class="join-page__error">{{ message }}</p>
+    } @else {
+      @if (quizState(); as state) {
+        <h1>{{ state.quizTitle }}</h1>
+        <p class="join-page__subtitle">{{ state.stepCount }} épreuve(s) · {{ state.players.length }} joueur(s) déjà présent(s)</p>
+
+        <form class="join-page__form" (submit)="$event.preventDefault(); submit()">
+          <div class="form-field">
+            <label for="player-name">Ton pseudo</label>
+            <input id="player-name" type="text" autocomplete="off" [value]="name()" (input)="name.set($any($event.target).value)" />
+          </div>
+
+          <button type="submit" class="btn btn-primary" [disabled]="joining()">
+            {{ joining() ? 'Connexion…' : 'Rejoindre la partie' }}
+          </button>
+        </form>
+      } @else {
+        <p>Chargement…</p>
+      }
+    }
+  </app-ui-card>
+</div>

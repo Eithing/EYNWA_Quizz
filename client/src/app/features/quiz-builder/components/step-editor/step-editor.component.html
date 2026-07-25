@@ -1,0 +1,144 @@
+<div class="step-editor">
+  <div class="form-field">
+    <label for="step-title">Titre de l'épreuve</label>
+    <input id="step-title" type="text" [value]="title()" (input)="onTitleChange($any($event.target).value)" />
+  </div>
+
+  <div class="step-editor__row">
+    <div class="form-field">
+      <label for="step-mode">Mode de jeu</label>
+      <select id="step-mode" [value]="config().mode" (change)="onModeChange($any($event.target).value)">
+        <option value="SOLO">Solo</option>
+        <option value="DUO">Duo</option>
+        <option value="TRIO">Trio</option>
+        <option value="CHEF_EQUIPE">Chef d'équipe</option>
+      </select>
+    </div>
+
+    <div class="form-field">
+      <label for="step-scoring">Barème</label>
+      <select id="step-scoring" [value]="config().scoring.type" (change)="onScoringTypeChange($any($event.target).value)">
+        <option value="FIXE">Fixe</option>
+        <option value="DEGRESSIF">Dégressif</option>
+        <option value="BONUS_VITESSE">Bonus vitesse</option>
+        <option value="MALUS">Malus / pénalité</option>
+      </select>
+    </div>
+
+    <div class="form-field">
+      <label for="step-time">Temps par question (s)</label>
+      <input
+        id="step-time"
+        type="number"
+        min="0"
+        [value]="config().triggers.tempsParQuestionSec ?? 30"
+        (input)="onTempsParQuestionChange($any($event.target).valueAsNumber)"
+      />
+    </div>
+  </div>
+
+  <div class="form-field">
+    <label>Jokers disponibles</label>
+    <div class="step-editor__jokers">
+      @for (joker of jokerOptions; track joker.value) {
+        <label class="step-editor__joker">
+          <input
+            type="checkbox"
+            [checked]="config().jokersAllowed.includes(joker.value)"
+            (change)="toggleJoker(joker.value)"
+          />
+          {{ joker.label }}
+        </label>
+      }
+    </div>
+  </div>
+
+  @if (isZoom()) {
+    <div class="step-editor__section">
+      <h4>Zoom Progressif</h4>
+
+      <div class="step-editor__row">
+        <div class="form-field">
+          <label for="coord-x">Coordonnée X</label>
+          <input id="coord-x" type="number" [value]="config().coordinates?.x ?? 0" (input)="onCoordinateChange('x', $any($event.target).valueAsNumber)" />
+        </div>
+        <div class="form-field">
+          <label for="coord-y">Coordonnée Y</label>
+          <input id="coord-y" type="number" [value]="config().coordinates?.y ?? 0" (input)="onCoordinateChange('y', $any($event.target).valueAsNumber)" />
+        </div>
+        <div class="form-field">
+          <label for="time-level">Temps par palier (s)</label>
+          <input id="time-level" type="number" [value]="config().timePerLevelSec ?? 8" (input)="onTimePerLevelChange($any($event.target).valueAsNumber)" />
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label>Image de l'épreuve</label>
+        <app-file-upload accept="image/*" [existingAssetId]="config().mediaAssetId" (assetUploaded)="onMediaUploaded($event)" />
+      </div>
+
+      <div class="form-field">
+        <label>Paliers de dézoom (zoom → points)</label>
+        @for (level of config().zoomLevels ?? []; track $index; let i = $index) {
+          <div class="step-editor__zoom-level">
+            <input type="number" [value]="level.zoom" (input)="onZoomLevelChange(i, 'zoom', $any($event.target).valueAsNumber)" placeholder="Zoom" />
+            <input type="number" [value]="level.pts" (input)="onZoomLevelChange(i, 'pts', $any($event.target).valueAsNumber)" placeholder="Points" />
+            <button type="button" class="btn btn-danger" (click)="removeZoomLevel(i)">✕</button>
+          </div>
+        }
+        <button type="button" class="btn btn-secondary" (click)="addZoomLevel()">+ Ajouter un palier</button>
+      </div>
+    </div>
+  }
+
+  @if (isBlindTest()) {
+    <div class="step-editor__section">
+      <h4>Blind Test Audio</h4>
+
+      <div class="form-field">
+        <label>Fichier audio</label>
+        <app-file-upload accept="audio/*" [existingAssetId]="config().mediaAssetId" (assetUploaded)="onMediaUploaded($event)" />
+      </div>
+
+      <div class="step-editor__row">
+        <div class="form-field">
+          <label for="listen-duration">Durée d'écoute (s)</label>
+          <input id="listen-duration" type="number" [value]="config().listenDurationSec ?? 10" (input)="onListenDurationChange($any($event.target).valueAsNumber)" />
+        </div>
+        <div class="form-field">
+          <label for="blind-answer">Réponse attendue</label>
+          <input id="blind-answer" type="text" [value]="config().answer ?? ''" (input)="onAnswerChange($any($event.target).value)" />
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (isQuestionDirecte()) {
+    <div class="step-editor__section">
+      <h4>Question Directe</h4>
+
+      <div class="form-field">
+        <label for="question-text">Question</label>
+        <textarea id="question-text" [value]="config().question ?? ''" (input)="onQuestionChange($any($event.target).value)"></textarea>
+      </div>
+
+      <div class="step-editor__row">
+        <div class="form-field">
+          <label for="question-answer">Réponse attendue</label>
+          <input id="question-answer" type="text" [value]="config().answer ?? ''" (input)="onAnswerChange($any($event.target).value)" />
+        </div>
+        <div class="form-field">
+          <label for="tolerance">Tolérance aux fautes (%)</label>
+          <input
+            id="tolerance"
+            type="number"
+            min="0"
+            max="100"
+            [value]="(config().toleranceRatio ?? 0.8) * 100"
+            (input)="onToleranceChange($any($event.target).valueAsNumber / 100)"
+          />
+        </div>
+      </div>
+    </div>
+  }
+</div>

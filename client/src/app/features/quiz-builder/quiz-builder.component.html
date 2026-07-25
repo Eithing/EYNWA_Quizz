@@ -1,0 +1,64 @@
+<div class="quiz-builder">
+  @if (loading()) {
+    <p>Chargement…</p>
+  } @else {
+    <div class="quiz-builder__header">
+      <div class="form-field">
+        <label for="quiz-title">Titre du quiz</label>
+        <input id="quiz-title" type="text" [value]="title()" (input)="title.set($any($event.target).value)" placeholder="Ex : Soirée Quiz Gaming #1" />
+      </div>
+      <div class="form-field">
+        <label for="quiz-description">Description (optionnel)</label>
+        <textarea id="quiz-description" [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+      </div>
+
+      @if (inviteCode(); as code) {
+        <p class="quiz-builder__invite">Code d'invitation : <strong>{{ code }}</strong></p>
+      }
+
+      @if (error(); as message) {
+        <p class="quiz-builder__error">{{ message }}</p>
+      }
+
+      <div class="quiz-builder__actions">
+        <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+          {{ saving() ? 'Enregistrement…' : 'Enregistrer le quiz' }}
+        </button>
+
+        @if (canLaunchSession) {
+          <button type="button" class="btn btn-secondary" [disabled]="launching()" (click)="launchSession()">
+            {{ launching() ? 'Lancement…' : '▶ Lancer une session' }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="quiz-builder__body">
+      <div class="quiz-builder__column">
+        <h3>Épreuves du quiz</h3>
+        <app-step-list
+          [steps]="steps()"
+          [selectedClientId]="selectedClientId()"
+          (select)="selectStep($event)"
+          (moveUp)="moveStepUp($event)"
+          (moveDown)="moveStepDown($event)"
+          (remove)="removeStep($event)"
+        />
+
+        <h3>Ajouter une épreuve</h3>
+        <app-step-catalog (stepTypeSelected)="addStep($event)" />
+      </div>
+
+      <div class="quiz-builder__column">
+        <h3>Configuration de l'épreuve</h3>
+        @if (selectedStep(); as step) {
+          <app-ui-card>
+            <app-step-editor [step]="step" (stepChange)="onStepChange($event)" />
+          </app-ui-card>
+        } @else {
+          <p class="quiz-builder__hint">Sélectionne une épreuve dans la liste pour la configurer.</p>
+        }
+      </div>
+    </div>
+  }
+</div>

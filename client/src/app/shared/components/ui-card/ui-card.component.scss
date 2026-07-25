@@ -1,0 +1,9 @@
+@use '../../../../styles/mixins';
+
+.ui-card {
+  @include mixins.card;
+
+  &--padded {
+    padding: 24px;
+  }
+}

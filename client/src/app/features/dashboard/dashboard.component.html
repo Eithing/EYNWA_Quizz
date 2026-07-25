@@ -1,0 +1,37 @@
+<div class="dashboard">
+  <div class="dashboard__header">
+    <div>
+      <h1>Mon espace</h1>
+      <p class="dashboard__subtitle">Tes quiz, visibles uniquement par toi.</p>
+    </div>
+    <a routerLink="/quizzes/new" class="btn btn-primary">+ Nouveau quiz</a>
+  </div>
+
+  @if (loading()) {
+    <p class="dashboard__hint">Chargement…</p>
+  } @else if (quizzes().length === 0) {
+    <app-ui-card>
+      <p class="dashboard__hint">Aucun quiz pour l'instant. Crée ton premier quiz pour commencer.</p>
+    </app-ui-card>
+  } @else {
+    <div class="dashboard__grid">
+      @for (quiz of quizzes(); track quiz.id) {
+        <app-ui-card>
+          <div class="quiz-card" (click)="openQuiz(quiz.id)">
+            <h3>{{ quiz.title }}</h3>
+            @if (quiz.description) {
+              <p class="quiz-card__description">{{ quiz.description }}</p>
+            }
+            <div class="quiz-card__meta">
+              <span>{{ quiz.stepCount }} épreuve(s)</span>
+              <span>Code : {{ quiz.inviteCode }}</span>
+            </div>
+            <button type="button" class="btn btn-danger quiz-card__delete" (click)="deleteQuiz(quiz.id, $event)">
+              Supprimer
+            </button>
+          </div>
+        </app-ui-card>
+      }
+    </div>
+  }
+</div>

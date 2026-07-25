@@ -1,0 +1,77 @@
+<div class="play">
+  @if (state(); as s) {
+    <div class="play__header">
+      <h1>{{ s.quizTitle }}</h1>
+      <span class="play__score">{{ myScore() }} pts</span>
+    </div>
+
+    @if (s.status === 'Lobby') {
+      <app-ui-card>
+        <p class="play__hint">En attente du démarrage par l'hôte…</p>
+      </app-ui-card>
+    }
+
+    @if (s.status !== 'Lobby' && (s.status === 'Finished' || !step())) {
+      <app-ui-card>
+        <p class="play__hint">Partie terminée. Merci d'avoir joué !</p>
+      </app-ui-card>
+    }
+
+    @if (s.status === 'InProgress' && step(); as currentStep) {
+      <app-ui-card>
+        <p class="play__step-index">Étape {{ currentStep.orderIndex + 1 }} / {{ s.stepCount }}</p>
+        <h2>{{ currentStep.title }}</h2>
+
+        @switch (currentStep.type) {
+          @case ('ZoomProgressif') {
+            @if (config().mediaAssetId; as assetId) {
+              <div class="play__media">
+                <img [src]="mediaService.buildFileUrl(assetId)" alt="Image à deviner" />
+              </div>
+            }
+          }
+          @case ('BlindTest') {
+            @if (config().mediaAssetId; as assetId) {
+              <div class="play__media">
+                <audio controls [src]="mediaService.buildFileUrl(assetId)"></audio>
+              </div>
+            }
+          }
+          @case ('QuestionDirecte') {
+            @if (config().question; as question) {
+              <p class="play__question">{{ question }}</p>
+            }
+          }
+        }
+
+        @if (currentStep.hasAnswered) {
+          <p class="play__answered">
+            Réponse envoyée
+            @if (result(); as r) {
+              — {{ r.isCorrect ? 'Correcte ✓' : 'Incorrecte ✕' }} ({{ r.pointsAwarded }} pts)
+            }
+          </p>
+        } @else {
+          <form class="play__form" (submit)="$event.preventDefault(); submitAnswer()">
+            <input
+              type="text"
+              placeholder="Ta réponse…"
+              autocomplete="off"
+              [value]="answer()"
+              (input)="answer.set($any($event.target).value)"
+            />
+            <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+              {{ submitting() ? 'Envoi…' : 'Valider' }}
+            </button>
+          </form>
+
+          @if (error(); as message) {
+            <p class="play__error">{{ message }}</p>
+          }
+        }
+      </app-ui-card>
+    }
+  } @else {
+    <p>Chargement…</p>
+  }
+</div>

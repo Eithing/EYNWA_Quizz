@@ -1,0 +1,28 @@
+<div class="auth-page">
+  <app-ui-card>
+    <h1>Créer un compte Game Master</h1>
+    <p class="auth-subtitle">Crée ton espace personnel pour construire tes quiz.</p>
+
+    <form class="auth-form" (submit)="$event.preventDefault(); submit()">
+      <div class="form-field">
+        <label for="username">Pseudo</label>
+        <input id="username" type="text" autocomplete="username" [value]="username()" (input)="username.set($any($event.target).value)" />
+      </div>
+
+      <div class="form-field">
+        <label for="password">Mot de passe</label>
+        <input id="password" type="password" autocomplete="new-password" [value]="password()" (input)="password.set($any($event.target).value)" />
+      </div>
+
+      @if (error(); as message) {
+        <p class="auth-error">{{ message }}</p>
+      }
+
+      <button type="submit" class="btn btn-primary" [disabled]="loading()">
+        {{ loading() ? 'Création…' : 'Créer mon compte' }}
+      </button>
+    </form>
+
+    <p class="auth-switch">Déjà un compte ? <a routerLink="/login">Se connecter</a></p>
+  </app-ui-card>
+</div>

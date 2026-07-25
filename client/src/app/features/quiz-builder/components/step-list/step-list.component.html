@@ -1,0 +1,18 @@
+<ol class="step-list">
+  @for (step of steps(); track step.clientId; let i = $index) {
+    <li class="step-list__item" [class.step-list__item--active]="step.clientId === selectedClientId()" (click)="select.emit(step.clientId)">
+      <span class="step-list__index">{{ i + 1 }}</span>
+      <div class="step-list__info">
+        <span class="step-list__title">{{ step.title }}</span>
+        <app-ui-badge>{{ labelFor(step.type) }}</app-ui-badge>
+      </div>
+      <div class="step-list__actions">
+        <button type="button" title="Monter" [disabled]="i === 0" (click)="moveUp.emit(step.clientId); $event.stopPropagation()">↑</button>
+        <button type="button" title="Descendre" [disabled]="i === steps().length - 1" (click)="moveDown.emit(step.clientId); $event.stopPropagation()">↓</button>
+        <button type="button" title="Supprimer" class="step-list__remove" (click)="remove.emit(step.clientId); $event.stopPropagation()">✕</button>
+      </div>
+    </li>
+  } @empty {
+    <p class="step-list__empty">Aucune épreuve ajoutée. Choisis-en une dans le catalogue.</p>
+  }
+</ol>

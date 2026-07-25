@@ -1,0 +1,11 @@
+<div class="step-catalog">
+  @for (meta of catalog; track meta.type) {
+    <app-ui-card>
+      <button type="button" class="step-catalog__item" (click)="select(meta)">
+        <app-ui-badge tone="accent">{{ meta.category }}</app-ui-badge>
+        <h4>{{ meta.label }}</h4>
+        <p>{{ meta.description }}</p>
+      </button>
+    </app-ui-card>
+  }
+</div>

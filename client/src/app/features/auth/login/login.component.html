@@ -1,0 +1,28 @@
+<div class="auth-page">
+  <app-ui-card>
+    <h1>Connexion Game Master</h1>
+    <p class="auth-subtitle">Accède à ton espace personnel de quiz.</p>
+
+    <form class="auth-form" (submit)="$event.preventDefault(); submit()">
+      <div class="form-field">
+        <label for="username">Pseudo</label>
+        <input id="username" type="text" autocomplete="username" [value]="username()" (input)="username.set($any($event.target).value)" />
+      </div>
+
+      <div class="form-field">
+        <label for="password">Mot de passe</label>
+        <input id="password" type="password" autocomplete="current-password" [value]="password()" (input)="password.set($any($event.target).value)" />
+      </div>
+
+      @if (error(); as message) {
+        <p class="auth-error">{{ message }}</p>
+      }
+
+      <button type="submit" class="btn btn-primary" [disabled]="loading()">
+        {{ loading() ? 'Connexion…' : 'Se connecter' }}
+      </button>
+    </form>
+
+    <p class="auth-switch">Pas encore de compte ? <a routerLink="/register">Créer un compte</a></p>
+  </app-ui-card>
+</div>

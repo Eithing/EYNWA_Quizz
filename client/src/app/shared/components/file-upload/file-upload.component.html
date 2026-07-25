@@ -1,0 +1,16 @@
+<div class="file-upload">
+  @if (previewUrl(); as url) {
+    <div class="file-upload__preview">
+      <img [src]="url" alt="Aperçu" />
+    </div>
+  }
+
+  <label class="file-upload__control">
+    <input type="file" [accept]="accept()" (change)="onFileSelected($event)" [disabled]="uploading()" />
+    <span>{{ uploading() ? 'Envoi en cours…' : 'Choisir un fichier' }}</span>
+  </label>
+
+  @if (error(); as message) {
+    <p class="file-upload__error">{{ message }}</p>
+  }
+</div>
