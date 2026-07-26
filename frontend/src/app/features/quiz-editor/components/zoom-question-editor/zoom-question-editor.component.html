@@ -1,0 +1,37 @@
+<div class="zoom-question-editor">
+  <div class="form-field">
+    <label>Image</label>
+
+    @if (payload().imageUrl) {
+      <div class="zoom-question-editor__picker" (click)="onImageClick($event)">
+        <img [src]="resolveImageUrl(payload().imageUrl)" alt="Image de la question" />
+        <span
+          class="zoom-question-editor__marker"
+          [style.left]="(payload().zoomFocusPoint.x * 100) + '%'"
+          [style.top]="(payload().zoomFocusPoint.y * 100) + '%'"
+        ></span>
+      </div>
+      <p class="zoom-question-editor__hint">Clique sur l'image pour définir le point de zoom.</p>
+    }
+
+    <label class="zoom-question-editor__upload">
+      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" (change)="onFileSelected($event)" [disabled]="uploading()" />
+      <span>{{ uploading() ? 'Envoi en cours…' : payload().imageUrl ? "Changer l'image" : 'Choisir une image' }}</span>
+    </label>
+
+    @if (uploadError(); as message) {
+      <p class="zoom-question-editor__error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="form-field">
+    <label for="accepted-answers">Réponses acceptées (séparées par des virgules)</label>
+    <input
+      id="accepted-answers"
+      type="text"
+      placeholder="Ex : Zelda, The Legend of Zelda"
+      [value]="acceptedAnswersText()"
+      (input)="onAcceptedAnswersChange($any($event.target).value)"
+    />
+  </div>
+</div>

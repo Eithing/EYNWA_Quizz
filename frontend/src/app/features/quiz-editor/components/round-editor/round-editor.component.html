@@ -1,0 +1,52 @@
+<div class="round-editor">
+  <div class="form-field">
+    <label for="round-title">Titre de la manche</label>
+    <input id="round-title" type="text" [value]="round().title" (input)="onTitleChange($any($event.target).value)" />
+  </div>
+
+  @if (isZoomImage()) {
+    <app-zoom-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
+  } @else {
+    <div class="form-field">
+      <label for="round-config">
+        Configuration (JSON) — pas encore d'éditeur visuel dédié pour {{ round().featureTypeKey }}
+      </label>
+      <textarea id="round-config" rows="8" [value]="round().configJson" (input)="onConfigJsonChange($any($event.target).value)"></textarea>
+    </div>
+  }
+
+  <div class="round-editor__questions">
+    <div class="round-editor__questions-header">
+      <label>Questions ({{ round().questions.length }})</label>
+      <button type="button" class="btn btn-secondary" (click)="addQuestion()">+ Ajouter une question</button>
+    </div>
+
+    @for (question of round().questions; track trackQuestion($index, question); let i = $index) {
+      <div class="question-editor">
+        <div class="question-editor__header">
+          <span>Question {{ i + 1 }}</span>
+          <div class="question-editor__actions">
+            <button type="button" [disabled]="i === 0" (click)="moveQuestion(question.clientId, -1)">↑</button>
+            <button type="button" [disabled]="i === round().questions.length - 1" (click)="moveQuestion(question.clientId, 1)">↓</button>
+            <button type="button" class="question-editor__remove" (click)="removeQuestion(question.clientId)">✕</button>
+          </div>
+        </div>
+
+        @if (isZoomImage()) {
+          <app-zoom-question-editor
+            [payloadJson]="question.payloadJson"
+            (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+          />
+        } @else {
+          <textarea
+            rows="4"
+            [value]="question.payloadJson"
+            (input)="onQuestionPayloadChange(question.clientId, $any($event.target).value)"
+          ></textarea>
+        }
+      </div>
+    } @empty {
+      <p class="round-editor__hint">Aucune question pour l'instant.</p>
+    }
+  </div>
+</div>

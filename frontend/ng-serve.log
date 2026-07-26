@@ -1,0 +1,35 @@
+
+> frontend@0.0.0 start
+> ng serve
+
+> Building...
+√ Building...
+Initial chunk files | Names                   |  Raw size
+polyfills.js        | polyfills               |  89.77 kB | 
+main.js             | main                    |  17.46 kB | 
+styles.css          | styles                  |   3.11 kB | 
+chunk-V4OHWVXM.js   | -                       |   2.26 kB | 
+chunk-UNJXG7BP.js   | -                       |   2.21 kB | 
+
+                    | Initial total           | 114.81 kB
+
+Lazy chunk files    | Names                   |  Raw size
+chunk-762Z2ZNB.js   | quiz-editor-component   |  94.71 kB | 
+chunk-UBUN7WLI.js   | host-live-component     |  34.75 kB | 
+chunk-YYXWUVJG.js   | play-component          |  29.92 kB | 
+chunk-3YPZFKSE.js   | library-component       |  11.48 kB | 
+chunk-USNEJC5V.js   | join-component          |   9.38 kB | 
+chunk-QK6PNICK.js   | login-component         |   3.94 kB | 
+chunk-KDX6ONCX.js   | auth-callback-component |   3.33 kB | 
+chunk-EU5OD6YX.js   | -                       |   3.07 kB | 
+chunk-24HDCJOO.js   | -                       |   2.85 kB | 
+chunk-JR5AZCTC.js   | -                       |   2.20 kB | 
+chunk-PYAQXFUY.js   | -                       |   1.56 kB | 
+chunk-XLYK4OAH.js   | -                       |   1.36 kB | 
+
+Application bundle generation complete. [1.958 seconds]
+
+Watch mode enabled. Watching for file changes...
+NOTE: Raw file sizes do not reflect development server per-request transformations.
+  ➜  Local:   http://localhost:4200/
+  ➜  press h + enter to show help

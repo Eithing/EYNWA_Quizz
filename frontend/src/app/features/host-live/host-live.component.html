@@ -1,0 +1,114 @@
+@if (state(); as s) {
+  <div class="host-live">
+    <div class="host-live__header">
+      <div>
+        <h1>{{ s.quizTitle }}</h1>
+        <p class="host-live__status">
+          Statut : {{ s.status }} · Manche {{ s.currentRoundIndex + 1 }} / {{ s.roundCount }}
+        </p>
+      </div>
+
+      <div class="host-live__controls">
+        @if (s.status === 'Lobby') {
+          <button type="button" class="btn btn-primary" (click)="begin()">Démarrer la partie</button>
+        }
+        @if (s.status === 'Running') {
+          <button type="button" class="btn btn-secondary" (click)="pause()">Pause</button>
+          <button type="button" class="btn btn-primary" (click)="next()">Question suivante</button>
+        }
+        @if (s.status === 'Paused') {
+          <button type="button" class="btn btn-primary" (click)="resume()">Reprendre</button>
+        }
+        @if (s.status === 'RoundIntermission') {
+          <button type="button" class="btn btn-primary" (click)="next()">Lancer la manche suivante</button>
+        }
+        @if (s.status !== 'Lobby') {
+          <button type="button" class="btn btn-secondary" (click)="toggleScoreboard()">
+            {{ s.scoreboardVisible ? 'Masquer les scores' : 'Afficher les scores aux joueurs' }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <app-ui-card>
+      <p class="host-live__invite-label">Lien d'invitation à partager :</p>
+      <div class="host-live__invite-row">
+        <code>{{ inviteUrl }}</code>
+        <button type="button" class="btn btn-secondary" (click)="copyInviteLink()">
+          {{ copied() ? 'Copié !' : 'Copier' }}
+        </button>
+      </div>
+    </app-ui-card>
+
+    <div class="host-live__body">
+      <app-ui-card>
+        <h3>Question en cours</h3>
+        @if (currentQuestion(); as question) {
+          <p class="host-live__question-title">{{ question.roundTitle }}</p>
+
+          @if (currentImageUrl(); as imageUrl) {
+            <img [src]="imageUrl" alt="Image de la question" class="host-live__image" />
+          }
+
+          <div class="host-live__metrics">
+            <span>Niveau de zoom : {{ question.currentLevel }}</span>
+            <span>Points si trouvé maintenant : {{ question.currentPoints }}</span>
+            <span>Prochain palier dans : {{ question.secondsRemainingInStep }}s</span>
+            <span>Fenêtre de réponse : {{ question.isAnswerWindowOpen ? 'ouverte' : 'fermée' }}</span>
+          </div>
+
+          @if (question.correctFinders.length > 0) {
+            <ol class="host-live__finders">
+              @for (pseudo of question.correctFinders; track pseudo; let i = $index) {
+                <li>{{ i + 1 }}. {{ pseudo }}</li>
+              }
+            </ol>
+          }
+        } @else if (s.status === 'Lobby') {
+          <p class="host-live__hint">En attente du démarrage.</p>
+        } @else if (s.status === 'RoundIntermission') {
+          <p class="host-live__hint">Manche terminée. Cliquez sur « Lancer la manche suivante » quand vous êtes prêt.</p>
+        } @else if (s.status === 'Finished') {
+          <p class="host-live__hint">Partie terminée.</p>
+        } @else {
+          <p class="host-live__hint">Chargement…</p>
+        }
+
+        @if (pendingAnswers().length > 0) {
+          <div class="host-live__pending">
+            <h4>Réponses à valider ({{ pendingAnswers().length }})</h4>
+            @for (answer of pendingAnswers(); track answer.id) {
+              <div class="pending-answer">
+                <span class="pending-answer__pseudo">{{ answer.playerPseudo }}</span>
+                <span class="pending-answer__text">{{ answer.rawAnswer }}</span>
+                <span class="pending-answer__points">{{ answer.pendingPoints }} pts si correct</span>
+                <div class="pending-answer__actions">
+                  <button type="button" class="btn btn-secondary" (click)="validateAnswer(answer, true)">✓ Correct</button>
+                  <button type="button" class="btn btn-danger" (click)="validateAnswer(answer, false)">✕ Incorrect</button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </app-ui-card>
+
+      <app-ui-card>
+        <h3>Joueurs ({{ s.players.length }})</h3>
+        @if (s.players.length === 0) {
+          <p class="host-live__hint">Personne n'a encore rejoint.</p>
+        } @else {
+          <ol class="host-live__players">
+            @for (player of s.players; track player.id) {
+              <li>
+                <span>{{ player.pseudo }}</span>
+                <strong>{{ player.score }} pts</strong>
+              </li>
+            }
+          </ol>
+        }
+      </app-ui-card>
+    </div>
+  </div>
+} @else {
+  <p>Chargement…</p>
+}

@@ -1,0 +1,18 @@
+<ol class="round-list">
+  @for (round of rounds(); track round.clientId; let i = $index) {
+    <li class="round-list__item" [class.round-list__item--active]="round.clientId === selectedClientId()" (click)="select.emit(round.clientId)">
+      <span class="round-list__index">{{ i + 1 }}</span>
+      <div class="round-list__info">
+        <span class="round-list__title">{{ round.title }}</span>
+        <app-ui-badge>{{ round.featureTypeKey }}</app-ui-badge>
+      </div>
+      <div class="round-list__actions">
+        <button type="button" title="Monter" [disabled]="i === 0" (click)="moveUp.emit(round.clientId); $event.stopPropagation()">↑</button>
+        <button type="button" title="Descendre" [disabled]="i === rounds().length - 1" (click)="moveDown.emit(round.clientId); $event.stopPropagation()">↓</button>
+        <button type="button" title="Supprimer" class="round-list__remove" (click)="remove.emit(round.clientId); $event.stopPropagation()">✕</button>
+      </div>
+    </li>
+  } @empty {
+    <p class="round-list__empty">Aucune manche ajoutée. Choisis un type ci-dessous.</p>
+  }
+</ol>

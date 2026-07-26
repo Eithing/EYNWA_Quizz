@@ -1,0 +1,50 @@
+.zoom-round-config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.zoom-round-config__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.zoom-round-config__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.zoom-step {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+
+  input {
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-app);
+    color: var(--text-primary);
+  }
+
+  .btn {
+    padding: 6px 10px;
+  }
+}
+
+.zoom-round-config__total {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+
+  strong {
+    color: var(--accent);
+  }
+}

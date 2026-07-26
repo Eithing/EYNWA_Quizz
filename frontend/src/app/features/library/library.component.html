@@ -1,0 +1,35 @@
+<div class="library">
+  <div class="library__header">
+    <div>
+      <h1>Ma librairie</h1>
+      <p class="library__subtitle">Tes quiz, visibles uniquement par toi.</p>
+    </div>
+    <a routerLink="/quizzes/new" class="btn btn-primary">+ Nouveau quiz</a>
+  </div>
+
+  @if (loading()) {
+    <p class="library__hint">Chargement…</p>
+  } @else if (quizzes().length === 0) {
+    <app-ui-card>
+      <p class="library__hint">Aucun quiz pour l'instant. Crée ton premier quiz pour commencer.</p>
+    </app-ui-card>
+  } @else {
+    <div class="library__grid">
+      @for (quiz of quizzes(); track quiz.id) {
+        <app-ui-card>
+          <div class="quiz-card" (click)="editQuiz(quiz.id)">
+            <h3>{{ quiz.title }}</h3>
+            @if (quiz.description) {
+              <p class="quiz-card__description">{{ quiz.description }}</p>
+            }
+            <p class="quiz-card__meta">{{ quiz.roundCount }} manche(s)</p>
+            <div class="quiz-card__actions">
+              <button type="button" class="btn btn-secondary" (click)="duplicateQuiz(quiz.id, $event)">Dupliquer</button>
+              <button type="button" class="btn btn-danger" (click)="deleteQuiz(quiz.id, $event)">Supprimer</button>
+            </div>
+          </div>
+        </app-ui-card>
+      }
+    </div>
+  }
+</div>

@@ -1,0 +1,9 @@
+<div class="zoom-viewer">
+  <img
+    [src]="imageUrl()"
+    alt="Image à deviner"
+    class="zoom-viewer__image"
+    [style.transform-origin]="(focusX() * 100) + '% ' + (focusY() * 100) + '%'"
+    [style.transform]="'scale(' + level() + ')'"
+  />
+</div>

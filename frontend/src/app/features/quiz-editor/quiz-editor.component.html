@@ -1,0 +1,62 @@
+<div class="quiz-editor">
+  @if (loading()) {
+    <p>Chargement…</p>
+  } @else {
+    <a routerLink="/" class="quiz-editor__back">← Retour à la librairie</a>
+
+    <div class="quiz-editor__header">
+      <div class="form-field">
+        <label for="quiz-title">Titre du quiz</label>
+        <input id="quiz-title" type="text" [value]="title()" (input)="title.set($any($event.target).value)" placeholder="Ex : Soirée Quiz Gaming #1" />
+      </div>
+      <div class="form-field">
+        <label for="quiz-description">Description (optionnel)</label>
+        <textarea id="quiz-description" [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+      </div>
+
+      @if (error(); as message) {
+        <p class="quiz-editor__error">{{ message }}</p>
+      }
+
+      <div class="quiz-editor__actions">
+        <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">
+          {{ saving() ? 'Enregistrement…' : 'Enregistrer le quiz' }}
+        </button>
+
+        @if (canLaunchSession) {
+          <button type="button" class="btn btn-secondary" [disabled]="launching()" (click)="launchSession()">
+            {{ launching() ? 'Lancement…' : '▶ Lancer une session' }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="quiz-editor__body">
+      <div class="quiz-editor__column">
+        <h3>Manches du quiz</h3>
+        <app-round-list
+          [rounds]="rounds()"
+          [selectedClientId]="selectedClientId()"
+          (select)="selectRound($event)"
+          (moveUp)="moveRoundUp($event)"
+          (moveDown)="moveRoundDown($event)"
+          (remove)="removeRound($event)"
+        />
+
+        <h3>Ajouter une manche</h3>
+        <app-feature-picker (featureSelected)="addRound($event)" />
+      </div>
+
+      <div class="quiz-editor__column">
+        <h3>Configuration de la manche</h3>
+        @if (selectedRound(); as round) {
+          <app-ui-card>
+            <app-round-editor [round]="round" (roundChange)="onRoundChange($event)" />
+          </app-ui-card>
+        } @else {
+          <p class="quiz-editor__hint">Sélectionne une manche dans la liste pour la configurer.</p>
+        }
+      </div>
+    </div>
+  }
+</div>

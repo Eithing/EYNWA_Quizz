@@ -1,0 +1,30 @@
+.feature-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.feature-picker__item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+
+  h4 {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+  }
+
+  p {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+}
+
+.feature-picker__empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}

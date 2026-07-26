@@ -1,0 +1,102 @@
+<div class="play">
+  @if (state(); as s) {
+    <div class="play__header">
+      <h1>{{ s.quizTitle }}</h1>
+      <span class="play__score">{{ myScore() }} pts</span>
+    </div>
+
+    @if (s.scoreboardVisible) {
+      <app-ui-card>
+        <h3 class="play__scoreboard-title">Classement</h3>
+        <ol class="play__scoreboard">
+          @for (player of s.players; track player.id) {
+            <li>
+              <span>{{ player.pseudo }}</span>
+              <strong>{{ player.score }} pts</strong>
+            </li>
+          }
+        </ol>
+      </app-ui-card>
+    } @else {
+
+    @if (s.status === 'Lobby') {
+      <app-ui-card>
+        <p class="play__hint">En attente du démarrage par l'hôte…</p>
+      </app-ui-card>
+    }
+
+    @if (s.status === 'Paused') {
+      <app-ui-card>
+        <p class="play__hint">Partie en pause…</p>
+      </app-ui-card>
+    }
+
+    @if (s.status === 'RoundIntermission') {
+      <app-ui-card>
+        <p class="play__hint">Manche terminée. En attente de l'hôte pour la manche suivante…</p>
+      </app-ui-card>
+    }
+
+    @if (s.status === 'Finished') {
+      <app-ui-card>
+        <p class="play__hint">Partie terminée. Merci d'avoir joué !</p>
+      </app-ui-card>
+    }
+
+    @if (s.status === 'Running') {
+      @if (question(); as q) {
+        <app-ui-card>
+          <p class="play__round-title">{{ q.roundTitle }}</p>
+
+          <app-zoom-viewer [imageUrl]="resolvedImageUrl()" [focusX]="q.zoomFocusX" [focusY]="q.zoomFocusY" [level]="q.currentLevel" />
+
+          @if (q.correctFinders.length > 0) {
+            <ol class="play__finders">
+              @for (pseudo of q.correctFinders; track pseudo; let i = $index) {
+                <li>{{ i + 1 }}. {{ pseudo }}</li>
+              }
+            </ol>
+          }
+
+          @if (q.hasAnswered) {
+            <p class="play__answered">
+              Réponse envoyée
+              @if (result(); as r) {
+                @if (r.validationMode === 'Manual') {
+                  — en attente de validation par l'hôte
+                } @else {
+                  — {{ r.isCorrect ? 'Correcte ✓' : 'Incorrecte ✕' }} ({{ r.pointsAwarded }} pts)
+                }
+              }
+            </p>
+          } @else if (q.isAnswerWindowOpen) {
+            <form class="play__form" (submit)="$event.preventDefault(); submitAnswer()">
+              <input
+                type="text"
+                placeholder="Ta réponse…"
+                autocomplete="off"
+                [value]="answer()"
+                (input)="answer.set($any($event.target).value)"
+              />
+              <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+                {{ submitting() ? 'Envoi…' : 'Valider' }}
+              </button>
+            </form>
+
+            @if (error(); as message) {
+              <p class="play__error">{{ message }}</p>
+            }
+          } @else {
+            <p class="play__hint">Temps écoulé pour cette question.</p>
+          }
+        </app-ui-card>
+      } @else {
+        <p>Chargement…</p>
+      }
+    }
+
+    }
+  } @else {
+    <p>Chargement…</p>
+  }
+</div>

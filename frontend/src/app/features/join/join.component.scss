@@ -1,0 +1,21 @@
+.join-page {
+  width: 100%;
+  max-width: 420px;
+  margin-top: 40px;
+}
+
+.join-page__subtitle {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 8px 0 20px;
+}
+
+.join-page__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.join-page__error {
+  color: var(--danger);
+}

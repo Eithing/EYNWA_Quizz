@@ -1,0 +1,93 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { environment } from '../../../environments/environment';
+import {
+  CurrentQuestionAdmin,
+  GameSessionState,
+  JoinSessionResponse,
+  PendingAnswer,
+  Player,
+  PlayerQuestion,
+  SubmitAnswerResponse
+} from '../../models/session.model';
+
+@Injectable({ providedIn: 'root' })
+export class SessionService {
+  private readonly baseUrl = `${environment.apiBaseUrl}/api/sessions`;
+
+  constructor(private readonly http: HttpClient) {}
+
+  // Game Master
+
+  start(quizId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/start/${quizId}`, {});
+  }
+
+  getStateAsGm(sessionId: number) {
+    return this.http.get<GameSessionState>(`${this.baseUrl}/${sessionId}/state`);
+  }
+
+  begin(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/begin`, {});
+  }
+
+  pause(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/pause`, {});
+  }
+
+  resume(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/resume`, {});
+  }
+
+  next(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/next`, {});
+  }
+
+  setScoreboardVisible(sessionId: number, visible: boolean) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/scoreboard`, { visible });
+  }
+
+  getCurrentQuestionFull(sessionId: number) {
+    return this.http.get<CurrentQuestionAdmin>(`${this.baseUrl}/${sessionId}/current-question-full`);
+  }
+
+  getPendingAnswers(sessionId: number) {
+    return this.http.get<PendingAnswer[]>(`${this.baseUrl}/${sessionId}/pending-answers`);
+  }
+
+  validateAnswer(sessionId: number, answerId: number, isCorrect: boolean) {
+    return this.http.post<Player>(`${this.baseUrl}/${sessionId}/answers/${answerId}/validate`, { isCorrect });
+  }
+
+  adjustScore(sessionId: number, playerId: number, delta: number, reason: string, questionId?: number) {
+    return this.http.post<Player>(`${this.baseUrl}/${sessionId}/score-adjustments`, {
+      playerId,
+      questionId: questionId ?? null,
+      delta,
+      reason
+    });
+  }
+
+  // Joueurs (anonyme)
+
+  getPublicState(token: string) {
+    return this.http.get<GameSessionState>(`${this.baseUrl}/by-token/${token}`);
+  }
+
+  join(token: string, pseudo: string) {
+    return this.http.post<JoinSessionResponse>(`${this.baseUrl}/by-token/${token}/join`, { pseudo });
+  }
+
+  getCurrentQuestionForPlayer(token: string, connectionToken: string) {
+    return this.http.get<PlayerQuestion>(`${this.baseUrl}/by-token/${token}/current-question`, {
+      params: { connectionToken }
+    });
+  }
+
+  submitAnswer(token: string, connectionToken: string, rawAnswer: string) {
+    return this.http.post<SubmitAnswerResponse>(`${this.baseUrl}/by-token/${token}/answer`, {
+      connectionToken,
+      rawAnswer
+    });
+  }
+}

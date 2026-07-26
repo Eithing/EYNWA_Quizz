@@ -1,0 +1,12 @@
+<div class="feature-picker">
+  @for (feature of features(); track feature.typeKey) {
+    <app-ui-card>
+      <button type="button" class="feature-picker__item" (click)="featureSelected.emit(feature)">
+        <h4>{{ feature.displayName }}</h4>
+        <p>{{ feature.description }}</p>
+      </button>
+    </app-ui-card>
+  } @empty {
+    <p class="feature-picker__empty">Aucun type de manche disponible pour l'instant.</p>
+  }
+</div>
