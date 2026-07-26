@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuizParty.Api.Data;
 using QuizParty.Api.Features;
+using QuizParty.Api.Features.Qa;
+using QuizParty.Api.Features.Shared;
 using QuizParty.Api.Features.Zoom;
 using QuizParty.Api.Hubs;
 using QuizParty.Api.Models;
@@ -25,8 +27,11 @@ builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddSingleton<IQuizFeature, ZoomImageFeature>();
+builder.Services.AddSingleton<IQuizFeature, QaTextFeature>();
 builder.Services.AddSingleton<FeatureRegistry>();
-builder.Services.AddSingleton<ZoomImageEngine>();
+builder.Services.AddSingleton<IFeatureEngine, ZoomImageEngine>();
+builder.Services.AddSingleton<IFeatureEngine, QaEngine>();
+builder.Services.AddSingleton<FeatureEngineRegistry>();
 
 builder.Services.AddDbContext<QuizPartyDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("Default") ?? "Data Source=quizparty.db"));

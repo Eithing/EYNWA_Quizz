@@ -138,6 +138,7 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
                     FeatureTypeKey = r.FeatureTypeKey,
                     Title = r.Title,
                     ConfigJson = r.ConfigJson,
+                    RequiresTargetPlayer = r.RequiresTargetPlayer,
                     Questions = r.Questions
                         .OrderBy(q => q.Order)
                         .Select(q => new Question { Order = q.Order, PayloadJson = q.PayloadJson })
@@ -183,6 +184,7 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
         FeatureTypeKey = dto.FeatureTypeKey,
         Title = dto.Title,
         ConfigJson = dto.ConfigJson,
+        RequiresTargetPlayer = dto.RequiresTargetPlayer,
         Questions = dto.Questions.Select(q => new Question { Order = q.Order, PayloadJson = q.PayloadJson }).ToList()
     };
 
@@ -200,6 +202,7 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
                 r.FeatureTypeKey,
                 r.Title,
                 r.ConfigJson,
+                r.RequiresTargetPlayer,
                 r.Questions.OrderBy(q => q.Order).Select(q => new QuestionDto(q.Id, q.Order, q.PayloadJson)).ToList()))
             .ToList());
 }

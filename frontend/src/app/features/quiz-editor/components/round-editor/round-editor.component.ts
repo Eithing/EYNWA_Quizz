@@ -1,12 +1,14 @@
 import { Component, computed, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { QuestionDraft, RoundDraft, toQuestionDraft } from '../../models/round-draft.model';
+import { QaQuestionEditorComponent } from '../qa-question-editor/qa-question-editor.component';
+import { QaRoundConfigComponent } from '../qa-round-config/qa-round-config.component';
 import { ZoomQuestionEditorComponent } from '../zoom-question-editor/zoom-question-editor.component';
 import { ZoomRoundConfigComponent } from '../zoom-round-config/zoom-round-config.component';
 
 @Component({
   selector: 'app-round-editor',
-  imports: [FormsModule, ZoomRoundConfigComponent, ZoomQuestionEditorComponent],
+  imports: [FormsModule, ZoomRoundConfigComponent, ZoomQuestionEditorComponent, QaRoundConfigComponent, QaQuestionEditorComponent],
   templateUrl: './round-editor.component.html',
   styleUrl: './round-editor.component.scss'
 })
@@ -15,9 +17,14 @@ export class RoundEditorComponent {
   readonly roundChange = output<RoundDraft>();
 
   protected readonly isZoomImage = computed(() => this.round().featureTypeKey === 'zoom-image');
+  protected readonly isQaText = computed(() => this.round().featureTypeKey === 'qa-text');
 
   protected onTitleChange(title: string): void {
     this.roundChange.emit({ ...this.round(), title });
+  }
+
+  protected onRequiresTargetPlayerChange(requiresTargetPlayer: boolean): void {
+    this.roundChange.emit({ ...this.round(), requiresTargetPlayer });
   }
 
   protected onConfigJsonChange(configJson: string): void {

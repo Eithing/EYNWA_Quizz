@@ -16,5 +16,8 @@ public class Round
     /// <summary>Configuration de la manche, schéma libre propre à la feature.</summary>
     public required string ConfigJson { get; set; }
 
+    /// <summary>Manche thématique : réservée à un seul joueur, choisi en direct par le GM au lancement de la manche (section ciblage, générique à toutes les features).</summary>
+    public bool RequiresTargetPlayer { get; set; }
+
     public List<Question> Questions { get; set; } = [];
 }

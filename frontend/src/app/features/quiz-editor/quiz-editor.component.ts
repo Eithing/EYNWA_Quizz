@@ -73,6 +73,7 @@ export class QuizEditorComponent implements OnInit {
       featureTypeKey: feature.typeKey,
       title: `Nouvelle manche — ${feature.displayName}`,
       configJson: '{}',
+      requiresTargetPlayer: false,
       questions: []
     });
     this.rounds.update((rounds) => [...rounds, draft]);

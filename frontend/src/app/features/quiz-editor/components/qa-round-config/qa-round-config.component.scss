@@ -1,0 +1,20 @@
+.qa-round-config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.qa-round-config__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.qa-round-config__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}

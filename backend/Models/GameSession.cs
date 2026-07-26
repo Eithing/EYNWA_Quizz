@@ -7,6 +7,8 @@ public enum GameSessionStatus
     Paused,
     /// <summary>Dernière question d'une manche terminée : en attente que le GM lance la manche suivante.</summary>
     RoundIntermission,
+    /// <summary>La manche à venir est ciblée (Round.RequiresTargetPlayer) : en attente que le GM désigne le joueur concerné avant que le minuteur démarre.</summary>
+    AwaitingTargetPlayer,
     Finished
 }
 
@@ -37,6 +39,12 @@ public class GameSession
 
     /// <summary>Contrôlé explicitement par le GM : affiche le classement courant côté joueurs (en cours de partie ou en fin de partie).</summary>
     public bool ScoreboardVisible { get; set; }
+
+    /// <summary>Joueur désigné par le GM pour la manche courante quand Round.RequiresTargetPlayer est vrai ; remis à null à chaque nouvelle manche.</summary>
+    public int? CurrentRoundTargetPlayerId { get; set; }
+
+    /// <summary>Joueur qui a buzzé le premier sur la question courante (mode buzzer de qa-text) ; remis à null à chaque nouvelle question et à chaque résolution du buzz par le GM.</summary>
+    public int? CurrentBuzzHolderPlayerId { get; set; }
 
     public List<Player> Players { get; set; } = [];
 }

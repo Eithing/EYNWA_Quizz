@@ -1,60 +1,67 @@
-using System.Globalization;
-using System.Text;
+using System.Text.Json;
+using QuizParty.Api.Features.Shared;
 
 namespace QuizParty.Api.Features.Zoom;
-
-public record ZoomAnswerEvaluation(bool? IsCorrect, int PointsAwarded);
 
 /// <summary>
 /// Moteur d'exécution de la feature "zoom-image" (section 6). Le serveur est seul autoritaire
 /// sur le temps : le palier actif est toujours recalculé depuis CurrentQuestionStartedAt, jamais
 /// transmis par le client.
 /// </summary>
-public class ZoomImageEngine
+public class ZoomImageEngine : IFeatureEngine
 {
-    /// <summary>Distance de Levenshtein maximale tolérée en mode Auto (section 9 : réglage par défaut).</summary>
-    private const int MaxLevenshteinDistance = 2;
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions PublicJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public ZoomRuntimeState ComputeState(ZoomRoundConfig config, DateTime questionStartedAt, DateTime? pausedAt, DateTime now)
+    public string FeatureTypeKey => "zoom-image";
+
+    public FeatureRuntimeState ComputeState(string configJson, DateTime questionStartedAt, DateTime? pausedAt, DateTime now)
     {
-        var elapsedSeconds = ComputeElapsedSeconds(questionStartedAt, pausedAt, now);
+        var config = ParseConfig(configJson);
+        var elapsedSeconds = SessionTiming.ComputeElapsedSeconds(questionStartedAt, pausedAt, now);
         return ComputeStateAtElapsed(config, elapsedSeconds);
     }
 
-    public ZoomAnswerEvaluation Evaluate(
-        ZoomRoundConfig config,
-        ZoomQuestionPayload payload,
+    public int PointsForElapsedSeconds(string configJson, double elapsedSeconds) =>
+        ComputeStateAtElapsed(ParseConfig(configJson), elapsedSeconds).CurrentPoints;
+
+    public FeatureAnswerEvaluation Evaluate(
+        string configJson,
+        string payloadJson,
         string rawAnswer,
         DateTime questionStartedAt,
         DateTime? pausedAt,
         DateTime submittedAt)
     {
-        var elapsedSeconds = ComputeElapsedSeconds(questionStartedAt, pausedAt, submittedAt);
+        var config = ParseConfig(configJson);
+        var payload = ParsePayload(payloadJson);
+        var elapsedSeconds = SessionTiming.ComputeElapsedSeconds(questionStartedAt, pausedAt, submittedAt);
         var state = ComputeStateAtElapsed(config, elapsedSeconds);
 
         if (config.ValidationMode == "Manual")
         {
-            return new ZoomAnswerEvaluation(null, 0);
+            return new FeatureAnswerEvaluation(null, 0);
         }
 
-        var isCorrect = payload.AcceptedAnswers.Any(accepted => IsMatch(accepted, rawAnswer));
-        return new ZoomAnswerEvaluation(isCorrect, isCorrect ? state.CurrentPoints : 0);
+        var isCorrect = payload.AcceptedAnswers.Any(accepted => AnswerMatcher.IsMatch(accepted, rawAnswer));
+        return new FeatureAnswerEvaluation(isCorrect, isCorrect ? state.CurrentPoints : 0);
     }
 
-    /// <summary>Points qu'une réponse correcte rapporterait si elle était validée manuellement maintenant (a posteriori, sur le palier actif au moment de l'envoi).</summary>
-    public int PointsForElapsedSeconds(ZoomRoundConfig config, double elapsedSeconds) =>
-        ComputeStateAtElapsed(config, elapsedSeconds).CurrentPoints;
+    public bool IsManualValidation(string configJson) => ParseConfig(configJson).ValidationMode == "Manual";
 
-    public double ComputeElapsedSeconds(DateTime questionStartedAt, DateTime? pausedAt, DateTime now)
+    public string BuildPublicPayloadJson(string payloadJson)
     {
-        var effectiveNow = pausedAt ?? now;
-        return Math.Max(0, (effectiveNow - questionStartedAt).TotalSeconds);
+        var payload = ParsePayload(payloadJson);
+        return JsonSerializer.Serialize(
+            new { imageUrl = payload.ImageUrl, zoomFocusX = payload.ZoomFocusPoint.X, zoomFocusY = payload.ZoomFocusPoint.Y },
+            PublicJsonOptions);
     }
 
-    /// <summary>Durée cumulée de tous les paliers de zoom, avant le temps supplémentaire (AnswerTimeSeconds).</summary>
-    public double TotalZoomDurationSeconds(ZoomRoundConfig config) => config.ZoomSteps.Sum(s => s.DurationSeconds);
+    /// <summary>Le "suspense" du dézoom se termine au début du palier final : au-delà, on ne fait plus que patienter, rien de nouveau à révéler.</summary>
+    public double GetFastForwardTargetElapsedSeconds(string configJson) =>
+        ParseConfig(configJson).ZoomSteps.Sum(s => s.DurationSeconds);
 
-    private static ZoomRuntimeState ComputeStateAtElapsed(ZoomRoundConfig config, double elapsedSeconds)
+    private static FeatureRuntimeState ComputeStateAtElapsed(ZoomRoundConfig config, double elapsedSeconds)
     {
         var cumulative = 0.0;
         ZoomStep? activeStep = null;
@@ -86,61 +93,12 @@ public class ZoomImageEngine
         var isAnswerWindowOpen = elapsedSeconds < totalRoundDuration;
         var shouldAutoAdvance = config.AutoAdvance && !isAnswerWindowOpen;
 
-        return new ZoomRuntimeState(currentLevel, currentPoints, secondsRemainingInStep, isAnswerWindowOpen, shouldAutoAdvance);
+        return new FeatureRuntimeState(currentLevel, currentPoints, secondsRemainingInStep, isAnswerWindowOpen, shouldAutoAdvance);
     }
 
-    private static bool IsMatch(string accepted, string submitted)
-    {
-        var a = Normalize(accepted);
-        var b = Normalize(submitted);
+    private static ZoomRoundConfig ParseConfig(string configJson) =>
+        JsonSerializer.Deserialize<ZoomRoundConfig>(configJson, JsonOptions) ?? new ZoomRoundConfig();
 
-        if (a.Length == 0 || b.Length == 0)
-        {
-            return a == b;
-        }
-
-        return LevenshteinDistance(a, b) <= MaxLevenshteinDistance;
-    }
-
-    private static string Normalize(string value)
-    {
-        var trimmed = value.Trim().ToLowerInvariant();
-        var decomposed = trimmed.Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder();
-
-        foreach (var c in decomposed)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
-            {
-                builder.Append(c);
-            }
-        }
-
-        return builder.ToString().Normalize(NormalizationForm.FormC);
-    }
-
-    private static int LevenshteinDistance(string a, string b)
-    {
-        var costs = new int[b.Length + 1];
-        for (var j = 0; j <= b.Length; j++)
-        {
-            costs[j] = j;
-        }
-
-        for (var i = 1; i <= a.Length; i++)
-        {
-            costs[0] = i;
-            var previousDiagonal = i - 1;
-            for (var j = 1; j <= b.Length; j++)
-            {
-                var previousDiagonalSave = costs[j];
-                costs[j] = a[i - 1] == b[j - 1]
-                    ? previousDiagonal
-                    : 1 + Math.Min(previousDiagonal, Math.Min(costs[j], costs[j - 1]));
-                previousDiagonal = previousDiagonalSave;
-            }
-        }
-
-        return costs[b.Length];
-    }
+    private static ZoomQuestionPayload ParsePayload(string payloadJson) =>
+        JsonSerializer.Deserialize<ZoomQuestionPayload>(payloadJson, JsonOptions) ?? new ZoomQuestionPayload();
 }

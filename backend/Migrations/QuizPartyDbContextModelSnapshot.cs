@@ -104,6 +104,9 @@ namespace QuizParty.Api.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CurrentBuzzHolderPlayerId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("CurrentQuestionIndex")
                         .HasColumnType("INTEGER");
 
@@ -111,6 +114,9 @@ namespace QuizParty.Api.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("CurrentRoundIndex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("CurrentRoundTargetPlayerId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("ExpiresAt")
@@ -242,6 +248,9 @@ namespace QuizParty.Api.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("QuizId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RequiresTargetPlayer")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Title")

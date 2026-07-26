@@ -47,6 +47,14 @@ export class SessionService {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/scoreboard`, { visible });
   }
 
+  setRoundTargetPlayer(sessionId: number, playerId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/round-target-player`, { playerId });
+  }
+
+  resolveBuzz(sessionId: number, isCorrect: boolean) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/buzzer/resolve`, { isCorrect });
+  }
+
   getCurrentQuestionFull(sessionId: number) {
     return this.http.get<CurrentQuestionAdmin>(`${this.baseUrl}/${sessionId}/current-question-full`);
   }
@@ -89,5 +97,9 @@ export class SessionService {
       connectionToken,
       rawAnswer
     });
+  }
+
+  buzz(token: string, connectionToken: string) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/by-token/${token}/buzz`, { connectionToken });
   }
 }

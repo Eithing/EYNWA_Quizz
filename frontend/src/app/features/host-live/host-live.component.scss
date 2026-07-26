@@ -73,12 +73,70 @@
   margin-bottom: 12px;
 }
 
+.host-live__qa-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.host-live__qa-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
 .host-live__metrics {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+.host-live__target-banner {
+  color: var(--accent);
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+
+.host-live__target-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-app);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+  }
+}
+
+.host-live__buzzer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+}
+
+.host-live__buzzer-holder {
+  font-size: 0.9rem;
+}
+
+.host-live__buzzer-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .host-live__finders {

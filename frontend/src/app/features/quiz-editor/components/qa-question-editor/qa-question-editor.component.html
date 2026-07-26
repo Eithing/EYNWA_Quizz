@@ -1,0 +1,23 @@
+<div class="qa-question-editor">
+  <div class="form-field">
+    <label for="qa-question-text">Question</label>
+    <textarea
+      id="qa-question-text"
+      rows="3"
+      placeholder="Ex : Quelle est la capitale de l'Islande ?"
+      [value]="payload().questionText"
+      (input)="onQuestionTextChange($any($event.target).value)"
+    ></textarea>
+  </div>
+
+  <div class="form-field">
+    <label for="qa-accepted-answers">Réponses acceptées (séparées par des virgules)</label>
+    <input
+      id="qa-accepted-answers"
+      type="text"
+      placeholder="Ex : Reykjavik, Reykjavík"
+      [value]="acceptedAnswersText()"
+      (input)="onAcceptedAnswersChange($any($event.target).value)"
+    />
+  </div>
+</div>

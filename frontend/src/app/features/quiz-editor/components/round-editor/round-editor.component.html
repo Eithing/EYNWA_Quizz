@@ -4,8 +4,19 @@
     <input id="round-title" type="text" [value]="round().title" (input)="onTitleChange($any($event.target).value)" />
   </div>
 
+  <label class="round-editor__checkbox">
+    <input
+      type="checkbox"
+      [checked]="round().requiresTargetPlayer"
+      (change)="onRequiresTargetPlayerChange($any($event.target).checked)"
+    />
+    Manche ciblée sur un seul joueur (le GM le désignera en direct pendant la partie — les autres seront spectateurs)
+  </label>
+
   @if (isZoomImage()) {
     <app-zoom-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
+  } @else if (isQaText()) {
+    <app-qa-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
   } @else {
     <div class="form-field">
       <label for="round-config">
@@ -34,6 +45,11 @@
 
         @if (isZoomImage()) {
           <app-zoom-question-editor
+            [payloadJson]="question.payloadJson"
+            (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+          />
+        } @else if (isQaText()) {
+          <app-qa-question-editor
             [payloadJson]="question.payloadJson"
             (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
           />

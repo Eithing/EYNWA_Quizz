@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -6,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using QuizParty.Api.Data;
 using QuizParty.Api.Dtos;
 using QuizParty.Api.Extensions;
-using QuizParty.Api.Features.Zoom;
+using QuizParty.Api.Features.Shared;
 using QuizParty.Api.Hubs;
 using QuizParty.Api.Models;
 using QuizParty.Api.Services;
@@ -15,10 +14,8 @@ namespace QuizParty.Api.Controllers;
 
 [ApiController]
 [Route("api/sessions")]
-public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngine, IHubContext<GameHub> hub) : ControllerBase
+public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry engineRegistry, IHubContext<GameHub> hub) : ControllerBase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
     // ------------------------------------------------------------------
     // Game Master
     // ------------------------------------------------------------------
@@ -92,9 +89,38 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             return BadRequest("La session a déjà démarré.");
         }
 
+        EnterRound(quiz.Rounds.OrderBy(r => r.Order).ToList(), session, 0);
+
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/round-target-player")]
+    public async Task<ActionResult<GameSessionStateDto>> SetRoundTargetPlayer(int id, SetRoundTargetPlayerRequest request)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        if (session.Status != GameSessionStatus.AwaitingTargetPlayer)
+        {
+            return BadRequest("La session n'attend pas la désignation d'un joueur.");
+        }
+
+        var player = session.Players.SingleOrDefault(p => p.Id == request.PlayerId);
+        if (player is null)
+        {
+            return BadRequest("Joueur introuvable dans cette session.");
+        }
+
+        session.CurrentRoundTargetPlayerId = player.Id;
         session.Status = GameSessionStatus.Running;
-        session.CurrentRoundIndex = 0;
-        session.CurrentQuestionIndex = 0;
         session.CurrentQuestionStartedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
@@ -219,14 +245,15 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             return NotFound("Aucune question en cours.");
         }
 
-        var config = ParseRoundConfig(round.ConfigJson);
-        var state = zoomEngine.ComputeState(config, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
         var correctFinders = await GetCorrectFinderPseudos(session.Id, question.Id);
 
         return Ok(new CurrentQuestionAdminDto(
             round.Id, round.Title, round.FeatureTypeKey,
             question.Id, question.PayloadJson, round.ConfigJson,
-            state.CurrentLevel, state.CurrentPoints, state.SecondsRemainingInStep, state.IsAnswerWindowOpen, correctFinders));
+            state.CurrentLevel, state.CurrentPoints, state.SecondsRemainingInStep, state.IsAnswerWindowOpen,
+            engine.IsBuzzerMode(round.ConfigJson), correctFinders));
     }
 
     [Authorize]
@@ -280,6 +307,60 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
         await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", playerDto);
 
         return Ok(playerDto);
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/buzzer/resolve")]
+    public async Task<ActionResult<GameSessionStateDto>> ResolveBuzz(int id, ResolveBuzzRequest request)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        if (session.CurrentBuzzHolderPlayerId is null)
+        {
+            return BadRequest("Personne n'a la main actuellement.");
+        }
+
+        var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
+        if (round is null || question is null)
+        {
+            return BadRequest("Aucune question en cours.");
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var holderId = session.CurrentBuzzHolderPlayerId.Value;
+        var points = engine.PointsForElapsedSeconds(round.ConfigJson, 0);
+
+        db.Answers.Add(new Answer
+        {
+            SessionId = session.Id,
+            PlayerId = holderId,
+            QuestionId = question.Id,
+            RawAnswer = "(buzzer)",
+            IsCorrect = request.IsCorrect,
+            PendingPoints = points,
+            PointsAwarded = request.IsCorrect ? points : 0,
+            ValidationMode = AnswerValidationMode.Manual,
+            SubmittedAt = DateTime.UtcNow,
+            ValidatedByGmAt = DateTime.UtcNow
+        });
+
+        session.CurrentBuzzHolderPlayerId = null;
+        await db.SaveChangesAsync();
+
+        if (request.IsCorrect)
+        {
+            var playerDto = await BuildPlayerDto(holderId, session.Id, null);
+            await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", playerDto);
+        }
+
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
     }
 
     [Authorize]
@@ -394,18 +475,79 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             return NotFound("Aucune question en cours.");
         }
 
-        var config = ParseRoundConfig(round.ConfigJson);
-        var payload = ParseQuestionPayload(question.PayloadJson);
-        var state = zoomEngine.ComputeState(config, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        var publicPayloadJson = engine.BuildPublicPayloadJson(question.PayloadJson);
 
         var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == connectionToken);
         var hasAnswered = player is not null &&
             await db.Answers.AnyAsync(a => a.PlayerId == player.Id && a.QuestionId == question.Id);
         var correctFinders = await GetCorrectFinderPseudos(session.Id, question.Id);
+        var isSpectator = round.RequiresTargetPlayer && (player is null || session.CurrentRoundTargetPlayerId != player.Id);
 
         return Ok(new PlayerQuestionDto(
-            question.Id, round.Title, payload.ImageUrl, payload.ZoomFocusPoint.X, payload.ZoomFocusPoint.Y,
-            state.CurrentLevel, state.SecondsRemainingInStep, state.IsAnswerWindowOpen, hasAnswered, correctFinders));
+            question.Id, round.Title, round.FeatureTypeKey, publicPayloadJson,
+            state.CurrentLevel, state.SecondsRemainingInStep, state.IsAnswerWindowOpen, hasAnswered, correctFinders, isSpectator,
+            engine.IsBuzzerMode(round.ConfigJson)));
+    }
+
+    [AllowAnonymous]
+    [HttpPost("by-token/{token}/buzz")]
+    public async Task<ActionResult<GameSessionStateDto>> Buzz(string token, BuzzRequest request)
+    {
+        var loaded = await LoadSessionByToken(token);
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+
+        var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == request.ConnectionToken);
+        if (player is null)
+        {
+            return Unauthorized();
+        }
+
+        var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
+        if (round is null || question is null || session.CurrentQuestionStartedAt is null)
+        {
+            return BadRequest("Aucune question en cours.");
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        if (!engine.IsBuzzerMode(round.ConfigJson))
+        {
+            return BadRequest("Cette question n'est pas une question de rapidité.");
+        }
+
+        if (round.RequiresTargetPlayer && session.CurrentRoundTargetPlayerId != player.Id)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, "Vous êtes spectateur pour cette manche.");
+        }
+
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        if (!state.IsAnswerWindowOpen)
+        {
+            return BadRequest("Le temps de réponse est écoulé.");
+        }
+
+        if (session.CurrentBuzzHolderPlayerId is not null)
+        {
+            return Conflict("Un autre joueur a déjà la main.");
+        }
+
+        var alreadyUsedAttempt = await db.Answers.AnyAsync(a => a.PlayerId == player.Id && a.QuestionId == question.Id);
+        if (alreadyUsedAttempt)
+        {
+            return Conflict("Vous avez déjà utilisé votre tentative sur cette question.");
+        }
+
+        session.CurrentBuzzHolderPlayerId = player.Id;
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
     }
 
     [AllowAnonymous]
@@ -432,19 +574,28 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             return BadRequest("Aucune question en cours.");
         }
 
+        if (round.RequiresTargetPlayer && session.CurrentRoundTargetPlayerId != player.Id)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, "Vous êtes spectateur pour cette manche.");
+        }
+
         var alreadyAnswered = await db.Answers.AnyAsync(a => a.PlayerId == player.Id && a.QuestionId == question.Id);
         if (alreadyAnswered)
         {
             return Conflict("Réponse déjà envoyée pour cette question.");
         }
 
-        var config = ParseRoundConfig(round.ConfigJson);
-        var payload = ParseQuestionPayload(question.PayloadJson);
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        if (engine.IsBuzzerMode(round.ConfigJson))
+        {
+            return BadRequest("Cette question se joue au buzzer : utilisez le bouton dédié.");
+        }
+
         var submittedAt = DateTime.UtcNow;
 
-        var elapsedSeconds = zoomEngine.ComputeElapsedSeconds(session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
-        var pendingPoints = zoomEngine.PointsForElapsedSeconds(config, elapsedSeconds);
-        var evaluation = zoomEngine.Evaluate(config, payload, request.RawAnswer, session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
+        var elapsedSeconds = SessionTiming.ComputeElapsedSeconds(session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
+        var pendingPoints = engine.PointsForElapsedSeconds(round.ConfigJson, elapsedSeconds);
+        var evaluation = engine.Evaluate(round.ConfigJson, question.PayloadJson, request.RawAnswer, session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
 
         var answer = new Answer
         {
@@ -455,7 +606,7 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             IsCorrect = evaluation.IsCorrect,
             PendingPoints = pendingPoints,
             PointsAwarded = evaluation.PointsAwarded,
-            ValidationMode = config.ValidationMode == "Manual" ? AnswerValidationMode.Manual : AnswerValidationMode.Auto,
+            ValidationMode = engine.IsManualValidation(round.ConfigJson) ? AnswerValidationMode.Manual : AnswerValidationMode.Auto,
             SubmittedAt = submittedAt
         };
 
@@ -533,15 +684,15 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             return;
         }
 
-        var config = ParseRoundConfig(round.ConfigJson);
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
 
-        // Si tout le monde a déjà trouvé, inutile de faire attendre les joueurs jusqu'au bout des
-        // paliers de zoom : on avance directement au palier final (temps supplémentaire), qu'on
-        // laisse s'écouler normalement avant de passer à la question suivante.
-        var dirty = await FastForwardIfAllPlayersAnswered(session, question, config);
+        // Si tout le monde a déjà trouvé, inutile de faire attendre les joueurs jusqu'au bout du
+        // "suspense" (paliers de zoom, minuteur…) : on saute directement à la dernière étape utile,
+        // qu'on laisse s'écouler normalement avant de passer à la question suivante.
+        var dirty = await FastForwardIfAllPlayersAnswered(session, round, question, engine);
 
-        var state = zoomEngine.ComputeState(config, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
-        var allAnswered = await AllPlayersAnsweredCorrectly(session, question);
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
+        var allAnswered = await AllPlayersAnsweredCorrectly(session, round, question);
 
         // Une fois que tout le monde a trouvé, la question se termine automatiquement même si
         // l'auto-advance n'est pas coché sur la manche : il n'y a plus personne pour répondre.
@@ -559,8 +710,22 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
         }
     }
 
-    private async Task<bool> AllPlayersAnsweredCorrectly(GameSession session, Question question)
+    private async Task<bool> AllPlayersAnsweredCorrectly(GameSession session, Round round, Question question)
     {
+        // Manche ciblée : seul le joueur désigné compte, les spectateurs ne peuvent pas répondre.
+        if (round.RequiresTargetPlayer)
+        {
+            return session.CurrentRoundTargetPlayerId is not null &&
+                await db.Answers.AnyAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id
+                    && a.PlayerId == session.CurrentRoundTargetPlayerId && a.IsCorrect == true);
+        }
+
+        // Mode buzzer : une course, pas un test collectif — une seule bonne réponse clôt la question.
+        if (!engineRegistry.Get(round.FeatureTypeKey).RequiresAllPlayersToAnswer(round.ConfigJson))
+        {
+            return await db.Answers.AnyAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.IsCorrect == true);
+        }
+
         if (session.Players.Count == 0)
         {
             return false;
@@ -570,21 +735,21 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
         return correctCount >= session.Players.Count;
     }
 
-    private async Task<bool> FastForwardIfAllPlayersAnswered(GameSession session, Question question, ZoomRoundConfig config)
+    private async Task<bool> FastForwardIfAllPlayersAnswered(GameSession session, Round round, Question question, IFeatureEngine engine)
     {
-        if (!await AllPlayersAnsweredCorrectly(session, question))
+        if (!await AllPlayersAnsweredCorrectly(session, round, question))
         {
             return false;
         }
 
-        var totalZoomDuration = zoomEngine.TotalZoomDurationSeconds(config);
-        var elapsed = zoomEngine.ComputeElapsedSeconds(session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
-        if (elapsed >= totalZoomDuration)
+        var target = engine.GetFastForwardTargetElapsedSeconds(round.ConfigJson);
+        var elapsed = SessionTiming.ComputeElapsedSeconds(session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
+        if (elapsed >= target)
         {
             return false;
         }
 
-        session.CurrentQuestionStartedAt = DateTime.UtcNow.AddSeconds(-totalZoomDuration);
+        session.CurrentQuestionStartedAt = DateTime.UtcNow.AddSeconds(-target);
         return true;
     }
 
@@ -634,12 +799,13 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             session.Status = GameSessionStatus.RoundIntermission;
             session.CurrentQuestionStartedAt = null;
             session.PausedAt = null;
+            session.CurrentBuzzHolderPlayerId = null;
             return;
         }
         else if (hasNextRound)
         {
-            session.CurrentRoundIndex++;
-            session.CurrentQuestionIndex = 0;
+            EnterRound(rounds, session, session.CurrentRoundIndex + 1);
+            return;
         }
         else
         {
@@ -651,6 +817,31 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
         session.Status = GameSessionStatus.Running;
         session.CurrentQuestionStartedAt = DateTime.UtcNow;
         session.PausedAt = null;
+        session.CurrentBuzzHolderPlayerId = null;
+    }
+
+    /// <summary>Positionne la session au début d'une manche : démarre directement si la manche est libre,
+    /// ou s'arrête en AwaitingTargetPlayer si elle est réservée à un joueur (Round.RequiresTargetPlayer),
+    /// en attendant que le GM le désigne.</summary>
+    private static void EnterRound(List<Round> rounds, GameSession session, int roundIndex)
+    {
+        session.CurrentRoundIndex = roundIndex;
+        session.CurrentQuestionIndex = 0;
+        session.CurrentRoundTargetPlayerId = null;
+        session.CurrentBuzzHolderPlayerId = null;
+        session.PausedAt = null;
+
+        var round = rounds[roundIndex];
+        if (round.RequiresTargetPlayer)
+        {
+            session.Status = GameSessionStatus.AwaitingTargetPlayer;
+            session.CurrentQuestionStartedAt = null;
+        }
+        else
+        {
+            session.Status = GameSessionStatus.Running;
+            session.CurrentQuestionStartedAt = DateTime.UtcNow;
+        }
     }
 
     private async Task BroadcastState(GameSession session, Quiz quiz)
@@ -687,9 +878,19 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
             .OrderByDescending(p => p.Score)
             .ToList();
 
+        var targetPlayerPseudo = session.CurrentRoundTargetPlayerId is null
+            ? null
+            : session.Players.SingleOrDefault(p => p.Id == session.CurrentRoundTargetPlayerId)?.Pseudo;
+
+        var buzzHolderPseudo = session.CurrentBuzzHolderPlayerId is null
+            ? null
+            : session.Players.SingleOrDefault(p => p.Id == session.CurrentBuzzHolderPlayerId)?.Pseudo;
+
         return new GameSessionStateDto(
             session.Id, session.InviteToken, quiz.Title, session.Status,
-            session.CurrentRoundIndex, session.CurrentQuestionIndex, quiz.Rounds.Count, session.ScoreboardVisible, players);
+            session.CurrentRoundIndex, session.CurrentQuestionIndex, quiz.Rounds.Count, session.ScoreboardVisible,
+            session.CurrentRoundTargetPlayerId, targetPlayerPseudo,
+            session.CurrentBuzzHolderPlayerId, buzzHolderPseudo, players);
     }
 
     private async Task<Dictionary<int, int>> ComputeAllScores(int sessionId)
@@ -714,10 +915,4 @@ public class SessionsController(QuizPartyDbContext db, ZoomImageEngine zoomEngin
 
         return result;
     }
-
-    private static ZoomRoundConfig ParseRoundConfig(string configJson) =>
-        JsonSerializer.Deserialize<ZoomRoundConfig>(configJson, JsonOptions) ?? new ZoomRoundConfig();
-
-    private static ZoomQuestionPayload ParseQuestionPayload(string payloadJson) =>
-        JsonSerializer.Deserialize<ZoomQuestionPayload>(payloadJson, JsonOptions) ?? new ZoomQuestionPayload();
 }

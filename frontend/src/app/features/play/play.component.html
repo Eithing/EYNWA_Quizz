@@ -37,6 +37,12 @@
       </app-ui-card>
     }
 
+    @if (s.status === 'AwaitingTargetPlayer') {
+      <app-ui-card>
+        <p class="play__hint">Cette manche est réservée à un joueur en particulier. En attente que l'hôte le désigne…</p>
+      </app-ui-card>
+    }
+
     @if (s.status === 'Finished') {
       <app-ui-card>
         <p class="play__hint">Partie terminée. Merci d'avoir joué !</p>
@@ -48,7 +54,13 @@
         <app-ui-card>
           <p class="play__round-title">{{ q.roundTitle }}</p>
 
-          <app-zoom-viewer [imageUrl]="resolvedImageUrl()" [focusX]="q.zoomFocusX" [focusY]="q.zoomFocusY" [level]="q.currentLevel" />
+          @if (zoomPayload(); as zoom) {
+            <app-zoom-viewer [imageUrl]="resolvedImageUrl()" [focusX]="zoom.zoomFocusX" [focusY]="zoom.zoomFocusY" [level]="q.currentLevel" />
+          }
+
+          @if (qaPayload(); as qa) {
+            <p class="play__question-text">{{ qa.questionText }}</p>
+          }
 
           @if (q.correctFinders.length > 0) {
             <ol class="play__finders">
@@ -58,7 +70,28 @@
             </ol>
           }
 
-          @if (q.hasAnswered) {
+          @if (q.isSpectator) {
+            <p class="play__hint play__spectator">
+              👀 Vous êtes spectateur pour cette manche
+              @if (s.currentRoundTargetPlayerPseudo) {
+                — c'est au tour de <strong>{{ s.currentRoundTargetPlayerPseudo }}</strong>.
+              }
+            </p>
+          } @else if (q.isBuzzerMode) {
+            @if (hasBuzzer()) {
+              <p class="play__hint play__buzzer-mine">🔔 Vous avez la main ! Répondez à l'oral, l'hôte valide.</p>
+            } @else if (s.currentBuzzHolderPlayerId) {
+              <p class="play__hint">🔔 <strong>{{ s.currentBuzzHolderPseudo }}</strong> a la main…</p>
+            } @else if (q.hasAnswered) {
+              <p class="play__hint">Vous avez déjà utilisé votre tentative sur cette question.</p>
+            } @else if (q.isAnswerWindowOpen) {
+              <button type="button" class="play__buzzer-btn" [disabled]="buzzing()" (click)="buzz()">
+                {{ buzzing() ? '…' : 'BUZZ !' }}
+              </button>
+            } @else {
+              <p class="play__hint">Temps écoulé pour cette question.</p>
+            }
+          } @else if (q.hasAnswered) {
             <p class="play__answered">
               Réponse envoyée
               @if (result(); as r) {

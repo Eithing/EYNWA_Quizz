@@ -10,6 +10,7 @@ export interface Round {
   featureTypeKey: string;
   title: string;
   configJson: string;
+  requiresTargetPlayer: boolean;
   questions: Question[];
 }
 

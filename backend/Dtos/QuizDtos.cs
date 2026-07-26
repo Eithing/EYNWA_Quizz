@@ -2,7 +2,7 @@ namespace QuizParty.Api.Dtos;
 
 public record QuestionDto(int? Id, int Order, string PayloadJson);
 
-public record RoundDto(int? Id, int Order, string FeatureTypeKey, string Title, string ConfigJson, List<QuestionDto> Questions);
+public record RoundDto(int? Id, int Order, string FeatureTypeKey, string Title, string ConfigJson, bool RequiresTargetPlayer, List<QuestionDto> Questions);
 
 public record QuizSummaryDto(int Id, string Title, string? Description, DateTime UpdatedAt, int RoundCount);
 

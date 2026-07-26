@@ -27,6 +27,14 @@
   padding: 12px 0;
 }
 
+.play__question-text {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  padding: 24px 12px;
+}
+
 .play__round-title {
   font-size: 0.85rem;
   color: var(--text-secondary);
@@ -52,6 +60,41 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-soft);
     }
+  }
+}
+
+.play__spectator {
+  margin-top: 16px;
+}
+
+.play__buzzer-mine {
+  color: var(--success);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.play__buzzer-btn {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 28px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--danger);
+  color: white;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: transform 0.1s ease-out, opacity 0.2s;
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 

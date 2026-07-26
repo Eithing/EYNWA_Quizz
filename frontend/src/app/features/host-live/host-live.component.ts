@@ -25,12 +25,24 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected readonly currentImageUrl = computed(() => {
     const question = this.currentQuestion();
-    if (!question) {
+    if (!question || question.featureTypeKey !== 'zoom-image') {
       return null;
     }
     try {
       const imageUrl = JSON.parse(question.payloadJson).imageUrl as string;
       return imageUrl ? this.mediaService.resolveUrl(imageUrl) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  protected readonly currentQaPayload = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'qa-text') {
+      return null;
+    }
+    try {
+      return JSON.parse(question.payloadJson) as { questionText: string; acceptedAnswers: string[] };
     } catch {
       return null;
     }
@@ -122,6 +134,14 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   protected toggleScoreboard(): void {
     const current = this.state()?.scoreboardVisible ?? false;
     this.sessionService.setScoreboardVisible(this.sessionId, !current).subscribe((state) => this.applyState(state));
+  }
+
+  protected selectTargetPlayer(playerId: number): void {
+    this.sessionService.setRoundTargetPlayer(this.sessionId, playerId).subscribe((state) => this.applyState(state));
+  }
+
+  protected resolveBuzz(isCorrect: boolean): void {
+    this.sessionService.resolveBuzz(this.sessionId, isCorrect).subscribe((state) => this.applyState(state));
   }
 
   protected validateAnswer(answer: PendingAnswer, isCorrect: boolean): void {

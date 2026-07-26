@@ -43,19 +43,62 @@
     <div class="host-live__body">
       <app-ui-card>
         <h3>Question en cours</h3>
-        @if (currentQuestion(); as question) {
+
+        @if (s.currentRoundTargetPlayerPseudo) {
+          <p class="host-live__target-banner">🎯 Manche ciblée : <strong>{{ s.currentRoundTargetPlayerPseudo }}</strong> répond, les autres sont spectateurs.</p>
+        }
+
+        @if (s.status === 'AwaitingTargetPlayer') {
+          <p class="host-live__hint">Cette manche est réservée à un joueur. Choisissez-le pour la démarrer :</p>
+          <ul class="host-live__target-picker">
+            @for (player of s.players; track player.id) {
+              <li>
+                <span>{{ player.pseudo }}</span>
+                <button type="button" class="btn btn-primary" (click)="selectTargetPlayer(player.id)">Désigner</button>
+              </li>
+            } @empty {
+              <p class="host-live__hint">Personne n'a encore rejoint pour être désigné.</p>
+            }
+          </ul>
+        } @else if (currentQuestion() !== null) {
+          @let question = currentQuestion()!;
           <p class="host-live__question-title">{{ question.roundTitle }}</p>
 
           @if (currentImageUrl(); as imageUrl) {
             <img [src]="imageUrl" alt="Image de la question" class="host-live__image" />
           }
 
+          @if (currentQaPayload(); as qa) {
+            <p class="host-live__qa-text">{{ qa.questionText }}</p>
+            @if (qa.acceptedAnswers.length > 0) {
+              <p class="host-live__qa-hint">Réponses acceptées : {{ qa.acceptedAnswers.join(', ') }}</p>
+            }
+          }
+
           <div class="host-live__metrics">
-            <span>Niveau de zoom : {{ question.currentLevel }}</span>
+            @if (question.featureTypeKey === 'zoom-image') {
+              <span>Niveau de zoom : {{ question.currentLevel }}</span>
+              <span>Prochain palier dans : {{ question.secondsRemainingInStep }}s</span>
+            } @else {
+              <span>Temps restant : {{ question.secondsRemainingInStep }}s</span>
+            }
             <span>Points si trouvé maintenant : {{ question.currentPoints }}</span>
-            <span>Prochain palier dans : {{ question.secondsRemainingInStep }}s</span>
             <span>Fenêtre de réponse : {{ question.isAnswerWindowOpen ? 'ouverte' : 'fermée' }}</span>
           </div>
+
+          @if (question.isBuzzerMode) {
+            @if (s.currentBuzzHolderPseudo) {
+              <div class="host-live__buzzer">
+                <p class="host-live__buzzer-holder">🔔 <strong>{{ s.currentBuzzHolderPseudo }}</strong> a la main</p>
+                <div class="host-live__buzzer-actions">
+                  <button type="button" class="btn btn-secondary" (click)="resolveBuzz(true)">✓ Correct</button>
+                  <button type="button" class="btn btn-danger" (click)="resolveBuzz(false)">✕ Incorrect</button>
+                </div>
+              </div>
+            } @else {
+              <p class="host-live__hint">En attente qu'un joueur buzz…</p>
+            }
+          }
 
           @if (question.correctFinders.length > 0) {
             <ol class="host-live__finders">

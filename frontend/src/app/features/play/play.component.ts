@@ -4,7 +4,14 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { GameSignalrService } from '../../core/services/game-signalr.service';
 import { MediaService } from '../../core/services/media.service';
 import { SessionService } from '../../core/services/session.service';
-import { GameSessionState, JoinSessionResponse, PlayerQuestion, SubmitAnswerResponse } from '../../models/session.model';
+import {
+  GameSessionState,
+  JoinSessionResponse,
+  PlayerQuestion,
+  QaPublicPayload,
+  SubmitAnswerResponse,
+  ZoomPublicPayload
+} from '../../models/session.model';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
 import { ZoomViewerComponent } from '../../shared/components/zoom-viewer/zoom-viewer.component';
 
@@ -27,14 +34,27 @@ export class PlayComponent implements OnInit, OnDestroy {
   protected readonly result = signal<SubmitAnswerResponse | null>(null);
   protected readonly submitting = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly buzzing = signal(false);
 
   protected readonly myScore = computed(
     () => this.state()?.players.find((p) => p.id === this.playerInfo?.playerId)?.score ?? 0
   );
 
-  protected readonly resolvedImageUrl = computed(() => {
+  protected readonly hasBuzzer = computed(() => this.state()?.currentBuzzHolderPlayerId === this.playerInfo?.playerId);
+
+  protected readonly zoomPayload = computed<ZoomPublicPayload | null>(() => {
     const question = this.question();
-    return question ? this.mediaService.resolveUrl(question.imageUrl) : '';
+    return question?.featureTypeKey === 'zoom-image' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
+  protected readonly qaPayload = computed<QaPublicPayload | null>(() => {
+    const question = this.question();
+    return question?.featureTypeKey === 'qa-text' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
+  protected readonly resolvedImageUrl = computed(() => {
+    const payload = this.zoomPayload();
+    return payload ? this.mediaService.resolveUrl(payload.imageUrl) : '';
   });
 
   constructor(
@@ -108,6 +128,24 @@ export class PlayComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.submitting.set(false);
         this.error.set(err.status === 409 ? 'Réponse déjà envoyée.' : "Échec de l'envoi de la réponse.");
+      }
+    });
+  }
+
+  protected buzz(): void {
+    if (this.buzzing()) {
+      return;
+    }
+
+    this.buzzing.set(true);
+    this.sessionService.buzz(this.token, this.playerInfo.connectionToken).subscribe({
+      next: (state) => {
+        this.buzzing.set(false);
+        this.state.set(state);
+      },
+      error: () => {
+        this.buzzing.set(false);
+        this.refreshState();
       }
     });
   }
