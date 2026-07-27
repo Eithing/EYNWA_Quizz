@@ -1,0 +1,29 @@
+<div class="blind-test-question-editor">
+  <div class="form-field">
+    <label>Fichier audio</label>
+
+    @if (payload().audioUrl) {
+      <app-audio-player [audioUrl]="resolveAudioUrl(payload().audioUrl)" />
+    }
+
+    <label class="blind-test-question-editor__upload">
+      <input type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a" (change)="onFileSelected($event)" [disabled]="uploading()" />
+      <span>{{ uploading() ? 'Envoi en cours…' : payload().audioUrl ? "Changer le fichier" : 'Choisir un fichier audio' }}</span>
+    </label>
+
+    @if (uploadError(); as message) {
+      <p class="blind-test-question-editor__error">{{ message }}</p>
+    }
+  </div>
+
+  <div class="form-field">
+    <label for="blind-test-accepted-answers">Réponses acceptées (séparées par des virgules)</label>
+    <input
+      id="blind-test-accepted-answers"
+      type="text"
+      placeholder="Ex : Bohemian Rhapsody, Queen"
+      [value]="acceptedAnswersText()"
+      (input)="onAcceptedAnswersChange($any($event.target).value)"
+    />
+  </div>
+</div>

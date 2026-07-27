@@ -37,13 +37,51 @@
     Passer automatiquement à la question suivante une fois le temps écoulé
   </label>
 
+  <label class="zoom-round-config__checkbox">
+    <input type="checkbox" [checked]="config().allowRetry" (change)="onAllowRetryChange($any($event.target).checked)" />
+    Autoriser plusieurs tentatives en cas de réponse fausse
+  </label>
+
+  <label class="zoom-round-config__checkbox">
+    <input type="checkbox" [checked]="config().rankBasedScoring" (change)="onRankBasedScoringChange($any($event.target).checked)" />
+    Points dégressifs selon l'ordre d'arrivée (1er = max, puis -X par rang) au lieu des points par palier
+  </label>
+
+  @if (config().rankBasedScoring) {
+    <div class="zoom-round-config__row">
+      <div class="form-field">
+        <label for="zoom-rank-max-points">Points du 1er</label>
+        <input
+          id="zoom-rank-max-points"
+          type="number"
+          min="0"
+          [value]="config().rankMaxPoints"
+          (input)="onRankMaxPointsChange($any($event.target).valueAsNumber)"
+        />
+      </div>
+
+      <div class="form-field">
+        <label for="zoom-rank-decrement">Dégressif par rang</label>
+        <input
+          id="zoom-rank-decrement"
+          type="number"
+          min="0"
+          [value]="config().rankPointsDecrement"
+          (input)="onRankPointsDecrementChange($any($event.target).valueAsNumber)"
+        />
+      </div>
+    </div>
+  }
+
   <div class="form-field">
     <label>Paliers de dézoom (du plus zoomé au plus large)</label>
     @for (step of config().zoomSteps; track $index; let i = $index) {
       <div class="zoom-step">
         <input type="number" step="0.5" [value]="step.level" (input)="onStepChange(i, 'level', $any($event.target).valueAsNumber)" placeholder="Niveau" />
         <input type="number" [value]="step.durationSeconds" (input)="onStepChange(i, 'durationSeconds', $any($event.target).valueAsNumber)" placeholder="Durée (s)" />
-        <input type="number" [value]="step.points" (input)="onStepChange(i, 'points', $any($event.target).valueAsNumber)" placeholder="Points" />
+        @if (!config().rankBasedScoring) {
+          <input type="number" [value]="step.points" (input)="onStepChange(i, 'points', $any($event.target).valueAsNumber)" placeholder="Points" />
+        }
         <button type="button" class="btn btn-danger" (click)="removeStep(i)">✕</button>
       </div>
     }

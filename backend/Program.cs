@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuizParty.Api.Data;
 using QuizParty.Api.Features;
+using QuizParty.Api.Features.BlindTest;
 using QuizParty.Api.Features.Qa;
 using QuizParty.Api.Features.Shared;
 using QuizParty.Api.Features.Zoom;
@@ -28,9 +29,11 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddSingleton<IQuizFeature, ZoomImageFeature>();
 builder.Services.AddSingleton<IQuizFeature, QaTextFeature>();
+builder.Services.AddSingleton<IQuizFeature, BlindTestFeature>();
 builder.Services.AddSingleton<FeatureRegistry>();
 builder.Services.AddSingleton<IFeatureEngine, ZoomImageEngine>();
 builder.Services.AddSingleton<IFeatureEngine, QaEngine>();
+builder.Services.AddSingleton<IFeatureEngine, BlindTestEngine>();
 builder.Services.AddSingleton<FeatureEngineRegistry>();
 
 builder.Services.AddDbContext<QuizPartyDbContext>(options =>

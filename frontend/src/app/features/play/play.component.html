@@ -62,6 +62,21 @@
             <p class="play__question-text">{{ qa.questionText }}</p>
           }
 
+          @if (blindTestPayload()) {
+            <app-audio-player [audioUrl]="resolvedAudioUrl()" />
+          }
+
+          @if (q.isAnswerWindowOpen) {
+            <div class="play__timing">
+              @if (zoomPayload()) {
+                <span>Palier suivant dans {{ q.secondsRemainingInStep }}s</span>
+                <span>Temps total restant : {{ q.secondsRemainingTotal }}s</span>
+              } @else {
+                <span>Temps restant : {{ q.secondsRemainingTotal }}s</span>
+              }
+            </div>
+          }
+
           @if (q.correctFinders.length > 0) {
             <ol class="play__finders">
               @for (pseudo of q.correctFinders; track pseudo; let i = $index) {

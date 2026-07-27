@@ -9,6 +9,7 @@ public record PlayerQuestionDto(
     string PublicPayloadJson,
     double CurrentLevel,
     int SecondsRemainingInStep,
+    int SecondsRemainingTotal,
     bool IsAnswerWindowOpen,
     bool HasAnswered,
     List<string> CorrectFinders,

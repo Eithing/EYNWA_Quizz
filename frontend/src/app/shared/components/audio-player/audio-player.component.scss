@@ -1,0 +1,26 @@
+.audio-player {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.audio-player__btn {
+  padding: 16px 32px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s ease-out, opacity 0.2s;
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}

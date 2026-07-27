@@ -13,10 +13,24 @@ interface ZoomRoundConfig {
   answerTimeSeconds: number;
   zoomSteps: ZoomStep[];
   finalLevel: number;
+  allowRetry: boolean;
+  rankBasedScoring: boolean;
+  rankMaxPoints: number;
+  rankPointsDecrement: number;
 }
 
 function defaultConfig(): ZoomRoundConfig {
-  return { validationMode: 'Auto', autoAdvance: false, answerTimeSeconds: 30, zoomSteps: [], finalLevel: 1 };
+  return {
+    validationMode: 'Auto',
+    autoAdvance: false,
+    answerTimeSeconds: 30,
+    zoomSteps: [],
+    finalLevel: 1,
+    allowRetry: false,
+    rankBasedScoring: false,
+    rankMaxPoints: 100,
+    rankPointsDecrement: 10
+  };
 }
 
 @Component({
@@ -69,6 +83,26 @@ export class ZoomRoundConfigComponent {
 
   protected onFinalLevelChange(value: number): void {
     this.config.update((c) => ({ ...c, finalLevel: value }));
+    this.emit();
+  }
+
+  protected onAllowRetryChange(value: boolean): void {
+    this.config.update((c) => ({ ...c, allowRetry: value }));
+    this.emit();
+  }
+
+  protected onRankBasedScoringChange(value: boolean): void {
+    this.config.update((c) => ({ ...c, rankBasedScoring: value }));
+    this.emit();
+  }
+
+  protected onRankMaxPointsChange(value: number): void {
+    this.config.update((c) => ({ ...c, rankMaxPoints: value }));
+    this.emit();
+  }
+
+  protected onRankPointsDecrementChange(value: number): void {
+    this.config.update((c) => ({ ...c, rankPointsDecrement: value }));
     this.emit();
   }
 

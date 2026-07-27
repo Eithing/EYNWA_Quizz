@@ -14,20 +14,20 @@ chunk-UNJXG7BP.js   | -                       |   2.21 kB |
                     | Initial total           | 114.81 kB
 
 Lazy chunk files    | Names                   |  Raw size
-chunk-FHWSHS4Z.js   | quiz-editor-component   | 116.62 kB | 
-chunk-PCWZCB5U.js   | host-live-component     |  47.59 kB | 
-chunk-UO63Q2YI.js   | play-component          |  40.95 kB | 
+chunk-MUKCOUNJ.js   | quiz-editor-component   | 147.92 kB | 
+chunk-J56BSCR3.js   | host-live-component     |  64.23 kB | 
+chunk-LZMAULRR.js   | play-component          |  45.11 kB | 
 chunk-3YPZFKSE.js   | library-component       |  11.48 kB | 
-chunk-4AUXTUZI.js   | join-component          |   9.38 kB | 
+chunk-VUX2SNM2.js   | join-component          |   9.38 kB | 
+chunk-LEXK2OYO.js   | -                       |   7.67 kB | 
 chunk-QK6PNICK.js   | login-component         |   3.94 kB | 
-chunk-PPY6WBM6.js   | -                       |   3.47 kB | 
+chunk-7MPATVVH.js   | -                       |   3.61 kB | 
 chunk-KDX6ONCX.js   | auth-callback-component |   3.33 kB | 
 chunk-24HDCJOO.js   | -                       |   2.85 kB | 
 chunk-JR5AZCTC.js   | -                       |   2.20 kB | 
 chunk-PYAQXFUY.js   | -                       |   1.56 kB | 
-chunk-XLYK4OAH.js   | -                       |   1.36 kB | 
 
-Application bundle generation complete. [1.623 seconds]
+Application bundle generation complete. [1.534 seconds]
 
 Watch mode enabled. Watching for file changes...
 NOTE: Raw file sizes do not reflect development server per-request transformations.

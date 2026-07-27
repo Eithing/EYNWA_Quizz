@@ -1,6 +1,12 @@
-<ol class="round-list">
+<ol class="round-list" cdkDropList (cdkDropListDropped)="onDrop($event)">
   @for (round of rounds(); track round.clientId; let i = $index) {
-    <li class="round-list__item" [class.round-list__item--active]="round.clientId === selectedClientId()" (click)="select.emit(round.clientId)">
+    <li
+      class="round-list__item"
+      cdkDrag
+      [class.round-list__item--active]="round.clientId === selectedClientId()"
+      (click)="select.emit(round.clientId)"
+    >
+      <span class="round-list__drag-handle" cdkDragHandle title="Glisser pour réordonner">⠿</span>
       <span class="round-list__index">{{ i + 1 }}</span>
       <div class="round-list__info">
         <span class="round-list__title">{{ round.title }}</span>

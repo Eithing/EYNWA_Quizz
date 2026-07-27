@@ -32,18 +32,22 @@ export interface CurrentQuestionAdmin {
   currentLevel: number;
   currentPoints: number;
   secondsRemainingInStep: number;
+  secondsRemainingTotal: number;
   isAnswerWindowOpen: boolean;
   isBuzzerMode: boolean;
   correctFinders: string[];
 }
 
-export interface PendingAnswer {
+export interface AnswerFeedItem {
   id: number;
   playerId: number;
   playerPseudo: string;
   rawAnswer: string;
-  submittedAt: string;
+  /** null = pas encore jugée (validation manuelle en attente). */
+  isCorrect: boolean | null;
+  pointsAwarded: number;
   pendingPoints: number;
+  submittedAt: string;
 }
 
 export interface JoinSessionResponse {
@@ -66,11 +70,19 @@ export interface PlayerQuestion {
   publicPayloadJson: string;
   currentLevel: number;
   secondsRemainingInStep: number;
+  secondsRemainingTotal: number;
   isAnswerWindowOpen: boolean;
   hasAnswered: boolean;
   correctFinders: string[];
   isSpectator: boolean;
   isBuzzerMode: boolean;
+}
+
+export interface RoundPreview {
+  roundTitle: string;
+  featureTypeKey: string;
+  /** Payload brut (non assaini) de la première question — vue GM uniquement, peut contenir les réponses acceptées. */
+  firstQuestionPayloadJson: string | null;
 }
 
 export interface ZoomPublicPayload {
@@ -81,4 +93,8 @@ export interface ZoomPublicPayload {
 
 export interface QaPublicPayload {
   questionText: string;
+}
+
+export interface BlindTestPublicPayload {
+  audioUrl: string;
 }

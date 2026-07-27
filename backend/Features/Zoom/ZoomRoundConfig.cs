@@ -15,4 +15,13 @@ public class ZoomRoundConfig
     public int AnswerTimeSeconds { get; set; } = 30;
     public List<ZoomStep> ZoomSteps { get; set; } = [];
     public double FinalLevel { get; set; } = 1;
+
+    /// <summary>Si vrai, un joueur qui se trompe peut retenter sa chance tant que la fenêtre de réponse est ouverte.</summary>
+    public bool AllowRetry { get; set; }
+
+    /// <summary>Si vrai, les points ne dépendent plus du palier de zoom mais du rang d'arrivée parmi les bonnes réponses
+    /// (1er = RankMaxPoints, puis -RankPointsDecrement par rang suivant, plancher à 0).</summary>
+    public bool RankBasedScoring { get; set; }
+    public int RankMaxPoints { get; set; } = 100;
+    public int RankPointsDecrement { get; set; } = 10;
 }

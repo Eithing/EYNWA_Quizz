@@ -29,11 +29,22 @@ public record CurrentQuestionAdminDto(
     double CurrentLevel,
     int CurrentPoints,
     int SecondsRemainingInStep,
+    int SecondsRemainingTotal,
     bool IsAnswerWindowOpen,
     bool IsBuzzerMode,
     List<string> CorrectFinders);
 
-public record PendingAnswerDto(int Id, int PlayerId, string PlayerPseudo, string RawAnswer, DateTime SubmittedAt, int PendingPoints);
+/// <summary>Vue GM de toutes les réponses reçues pour la question courante, jugées ou non — permet de voir
+/// passer les réponses même en validation automatique et de corriger un verdict à tout moment.</summary>
+public record AnswerFeedDto(
+    int Id,
+    int PlayerId,
+    string PlayerPseudo,
+    string RawAnswer,
+    bool? IsCorrect,
+    int PointsAwarded,
+    int PendingPoints,
+    DateTime SubmittedAt);
 
 public record JoinSessionRequest(string Pseudo);
 
@@ -54,3 +65,6 @@ public record SetScoreboardVisibleRequest(bool Visible);
 public record SetRoundTargetPlayerRequest(int PlayerId);
 
 public record ResolveBuzzRequest(bool IsCorrect);
+
+/// <summary>Aperçu GM d'une manche pas encore démarrée (ex: avant de désigner le joueur ciblé), pour savoir sur quoi elle porte.</summary>
+public record RoundPreviewDto(string RoundTitle, string FeatureTypeKey, string? FirstQuestionPayloadJson);

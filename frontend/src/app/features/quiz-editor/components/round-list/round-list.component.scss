@@ -27,6 +27,30 @@
   }
 }
 
+.round-list__item.cdk-drag-preview {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.round-list__item.cdk-drag-placeholder {
+  opacity: 0.3;
+}
+
+.round-list.cdk-drop-list-dragging .round-list__item:not(.cdk-drag-placeholder) {
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.round-list__drag-handle {
+  color: var(--text-muted);
+  cursor: grab;
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
 .round-list__index {
   width: 22px;
   height: 22px;

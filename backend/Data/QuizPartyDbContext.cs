@@ -84,9 +84,10 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
             .HasForeignKey(a => a.QuestionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Pas d'index unique sur (PlayerId, QuestionId) : les manches à tentatives multiples (AllowRetry)
+        // créent une ligne Answer par tentative.
         modelBuilder.Entity<Answer>()
-            .HasIndex(a => new { a.PlayerId, a.QuestionId })
-            .IsUnique();
+            .HasIndex(a => new { a.PlayerId, a.QuestionId });
 
         modelBuilder.Entity<ScoreAdjustment>()
             .HasOne(a => a.Session)

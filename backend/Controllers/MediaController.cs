@@ -9,10 +9,11 @@ namespace QuizParty.Api.Controllers;
 [Route("api/media")]
 public class MediaController(IWebHostEnvironment env) : ControllerBase
 {
-    private static readonly HashSet<string> AllowedExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
-    private const long MaxSizeBytes = 20 * 1024 * 1024;
+    private static readonly HashSet<string> AllowedExtensions =
+        [".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp3", ".wav", ".ogg", ".m4a"];
+    private const long MaxSizeBytes = 40 * 1024 * 1024;
 
-    /// <summary>Upload d'image pour une question (ex: zoom-image). Réservé aux GM authentifiés.</summary>
+    /// <summary>Upload d'image ou de son pour une question (ex: zoom-image, blind-test). Réservé aux GM authentifiés.</summary>
     [Authorize]
     [HttpPost]
     [RequestSizeLimit(MaxSizeBytes)]
@@ -26,7 +27,7 @@ public class MediaController(IWebHostEnvironment env) : ControllerBase
         var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!AllowedExtensions.Contains(extension))
         {
-            return BadRequest("Type de fichier non supporté (image uniquement : png, jpg, webp, gif).");
+            return BadRequest("Type de fichier non supporté (image : png, jpg, webp, gif — audio : mp3, wav, ogg, m4a).");
         }
 
         var mediaRoot = Path.Combine(env.ContentRootPath, "media");

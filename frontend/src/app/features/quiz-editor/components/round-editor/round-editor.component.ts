@@ -1,6 +1,7 @@
 import { Component, computed, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { QuestionDraft, RoundDraft, toQuestionDraft } from '../../models/round-draft.model';
+import { BlindTestQuestionEditorComponent } from '../blind-test-question-editor/blind-test-question-editor.component';
 import { QaQuestionEditorComponent } from '../qa-question-editor/qa-question-editor.component';
 import { QaRoundConfigComponent } from '../qa-round-config/qa-round-config.component';
 import { ZoomQuestionEditorComponent } from '../zoom-question-editor/zoom-question-editor.component';
@@ -8,7 +9,14 @@ import { ZoomRoundConfigComponent } from '../zoom-round-config/zoom-round-config
 
 @Component({
   selector: 'app-round-editor',
-  imports: [FormsModule, ZoomRoundConfigComponent, ZoomQuestionEditorComponent, QaRoundConfigComponent, QaQuestionEditorComponent],
+  imports: [
+    FormsModule,
+    ZoomRoundConfigComponent,
+    ZoomQuestionEditorComponent,
+    QaRoundConfigComponent,
+    QaQuestionEditorComponent,
+    BlindTestQuestionEditorComponent
+  ],
   templateUrl: './round-editor.component.html',
   styleUrl: './round-editor.component.scss'
 })
@@ -18,6 +26,9 @@ export class RoundEditorComponent {
 
   protected readonly isZoomImage = computed(() => this.round().featureTypeKey === 'zoom-image');
   protected readonly isQaText = computed(() => this.round().featureTypeKey === 'qa-text');
+  protected readonly isBlindTest = computed(() => this.round().featureTypeKey === 'blind-test');
+  // qa-text et blind-test partagent exactement la même configuration de manche.
+  protected readonly usesQaRoundConfig = computed(() => this.isQaText() || this.isBlindTest());
 
   protected onTitleChange(title: string): void {
     this.roundChange.emit({ ...this.round(), title });

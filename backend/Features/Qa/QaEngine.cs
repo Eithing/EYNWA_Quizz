@@ -5,14 +5,15 @@ namespace QuizParty.Api.Features.Qa;
 
 /// <summary>
 /// Moteur d'exécution de la feature "qa-text" (question écrite / réponse attendue). Contrairement à
-/// zoom-image, pas de dégressivité : les points sont fixes tant que la fenêtre de réponse est ouverte.
+/// zoom-image, pas de dégressivité dans le temps : les points sont fixes (ou basés sur le rang) tant que
+/// la fenêtre de réponse est ouverte. Sert aussi de base à BlindTestEngine (même config, payload différent).
 /// </summary>
 public class QaEngine : IFeatureEngine
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-    private static readonly JsonSerializerOptions PublicJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    protected static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    protected static readonly JsonSerializerOptions PublicJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public string FeatureTypeKey => "qa-text";
+    public virtual string FeatureTypeKey => "qa-text";
 
     public FeatureRuntimeState ComputeState(string configJson, DateTime questionStartedAt, DateTime? pausedAt, DateTime now)
     {
@@ -24,7 +25,7 @@ public class QaEngine : IFeatureEngine
     public int PointsForElapsedSeconds(string configJson, double elapsedSeconds) =>
         ComputeStateAtElapsed(ParseConfig(configJson), elapsedSeconds).CurrentPoints;
 
-    public FeatureAnswerEvaluation Evaluate(
+    public virtual FeatureAnswerEvaluation Evaluate(
         string configJson,
         string payloadJson,
         string rawAnswer,
@@ -46,12 +47,22 @@ public class QaEngine : IFeatureEngine
 
     public bool IsManualValidation(string configJson) => ParseConfig(configJson).ValidationMode == "Manual";
 
+    /// <summary>En mode buzzer, gouverne le droit de re-buzzer après une mauvaise réponse (voir GetRetryCooldownSeconds).</summary>
+    public bool AllowsRetryAfterWrongAnswer(string configJson) => ParseConfig(configJson).AllowRetry;
+
+    /// <summary>Mode buzzer uniquement : délai avant de pouvoir re-buzzer après une mauvaise réponse. Sans effet sur la réponse écrite classique.</summary>
+    public int GetRetryCooldownSeconds(string configJson)
+    {
+        var config = ParseConfig(configJson);
+        return config.BuzzerMode ? config.BuzzerRetryCooldownSeconds : 0;
+    }
+
     public bool IsBuzzerMode(string configJson) => ParseConfig(configJson).BuzzerMode;
 
     /// <summary>En mode buzzer, une seule bonne réponse suffit : la question est une course, pas un test collectif.</summary>
     public bool RequiresAllPlayersToAnswer(string configJson) => !ParseConfig(configJson).BuzzerMode;
 
-    public string BuildPublicPayloadJson(string payloadJson)
+    public virtual string BuildPublicPayloadJson(string payloadJson)
     {
         var payload = ParsePayload(payloadJson);
         return JsonSerializer.Serialize(new { questionText = payload.QuestionText }, PublicJsonOptions);
@@ -60,16 +71,28 @@ public class QaEngine : IFeatureEngine
     /// <summary>Pas de palier à révéler progressivement : une fois tout le monde répondu, plus rien à attendre.</summary>
     public double GetFastForwardTargetElapsedSeconds(string configJson) => ParseConfig(configJson).AnswerTimeSeconds;
 
+    public bool UsesRankBasedScoring(string configJson) => ParseConfig(configJson).RankBasedScoring;
+
+    public int PointsForRank(string configJson, int correctAnswerRank)
+    {
+        var config = ParseConfig(configJson);
+        return Math.Max(0, config.RankMaxPoints - config.RankPointsDecrement * correctAnswerRank);
+    }
+
     private static FeatureRuntimeState ComputeStateAtElapsed(QaRoundConfig config, double elapsedSeconds)
     {
         var secondsRemaining = (int)Math.Ceiling(Math.Max(0, config.AnswerTimeSeconds - elapsedSeconds));
         var isAnswerWindowOpen = elapsedSeconds < config.AnswerTimeSeconds;
         var shouldAutoAdvance = config.AutoAdvance && !isAnswerWindowOpen;
+        // En scoring au rang, le nombre de points affiché ici (avant réponse) est le meilleur cas possible :
+        // le rang exact dépend des réponses déjà validées des autres joueurs, connu seulement du contrôleur.
+        var currentPoints = config.RankBasedScoring ? config.RankMaxPoints : config.Points;
 
-        return new FeatureRuntimeState(1, config.Points, secondsRemaining, isAnswerWindowOpen, shouldAutoAdvance);
+        // Pas de palier : le temps restant "global" est le même que le temps restant du seul palier.
+        return new FeatureRuntimeState(1, currentPoints, secondsRemaining, secondsRemaining, isAnswerWindowOpen, shouldAutoAdvance);
     }
 
-    private static QaRoundConfig ParseConfig(string configJson) =>
+    protected static QaRoundConfig ParseConfig(string configJson) =>
         JsonSerializer.Deserialize<QaRoundConfig>(configJson, JsonOptions) ?? new QaRoundConfig();
 
     private static QaQuestionPayload ParsePayload(string payloadJson) =>

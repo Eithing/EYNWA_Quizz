@@ -15,7 +15,7 @@
 
   @if (isZoomImage()) {
     <app-zoom-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
-  } @else if (isQaText()) {
+  } @else if (usesQaRoundConfig()) {
     <app-qa-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
   } @else {
     <div class="form-field">
@@ -50,6 +50,11 @@
           />
         } @else if (isQaText()) {
           <app-qa-question-editor
+            [payloadJson]="question.payloadJson"
+            (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+          />
+        } @else if (isBlindTest()) {
+          <app-blind-test-question-editor
             [payloadJson]="question.payloadJson"
             (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
           />

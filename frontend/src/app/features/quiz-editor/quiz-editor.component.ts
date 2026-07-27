@@ -96,6 +96,15 @@ export class QuizEditorComponent implements OnInit {
     this.swapRounds(clientId, 1);
   }
 
+  protected reorderRounds(event: { previousIndex: number; currentIndex: number }): void {
+    this.rounds.update((rounds) => {
+      const reordered = [...rounds];
+      const [moved] = reordered.splice(event.previousIndex, 1);
+      reordered.splice(event.currentIndex, 0, moved);
+      return reordered.map((r, i) => ({ ...r, order: i }));
+    });
+  }
+
   private swapRounds(clientId: number, offset: number): void {
     this.rounds.update((rounds) => {
       const index = rounds.findIndex((r) => r.clientId === clientId);

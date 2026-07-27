@@ -49,6 +49,16 @@ public class ZoomImageEngine : IFeatureEngine
 
     public bool IsManualValidation(string configJson) => ParseConfig(configJson).ValidationMode == "Manual";
 
+    public bool AllowsRetryAfterWrongAnswer(string configJson) => ParseConfig(configJson).AllowRetry;
+
+    public bool UsesRankBasedScoring(string configJson) => ParseConfig(configJson).RankBasedScoring;
+
+    public int PointsForRank(string configJson, int correctAnswerRank)
+    {
+        var config = ParseConfig(configJson);
+        return Math.Max(0, config.RankMaxPoints - config.RankPointsDecrement * correctAnswerRank);
+    }
+
     public string BuildPublicPayloadJson(string payloadJson)
     {
         var payload = ParsePayload(payloadJson);
@@ -81,7 +91,9 @@ public class ZoomImageEngine : IFeatureEngine
         // Paliers épuisés : l'image reste au niveau final, les points restent plafonnés à ceux du dernier palier.
         var lastStep = config.ZoomSteps.Count > 0 ? config.ZoomSteps[^1] : null;
         var currentLevel = activeStep?.Level ?? config.FinalLevel;
-        var currentPoints = activeStep?.Points ?? lastStep?.Points ?? 0;
+        // En scoring au rang, le nombre de points affiché ici (avant réponse) est le meilleur cas possible :
+        // le rang exact dépend des réponses déjà validées des autres joueurs, connu seulement du contrôleur.
+        var currentPoints = config.RankBasedScoring ? config.RankMaxPoints : (activeStep?.Points ?? lastStep?.Points ?? 0);
 
         // AnswerTimeSeconds est un temps SUPPLÉMENTAIRE accordé une fois la séquence de zoom
         // terminée (pas un plafond concurrent) : sinon un answerTimeSeconds plus court que la
@@ -92,8 +104,9 @@ public class ZoomImageEngine : IFeatureEngine
 
         var isAnswerWindowOpen = elapsedSeconds < totalRoundDuration;
         var shouldAutoAdvance = config.AutoAdvance && !isAnswerWindowOpen;
+        var secondsRemainingTotal = (int)Math.Ceiling(Math.Max(0, totalRoundDuration - elapsedSeconds));
 
-        return new FeatureRuntimeState(currentLevel, currentPoints, secondsRemainingInStep, isAnswerWindowOpen, shouldAutoAdvance);
+        return new FeatureRuntimeState(currentLevel, currentPoints, secondsRemainingInStep, secondsRemainingTotal, isAnswerWindowOpen, shouldAutoAdvance);
     }
 
     private static ZoomRoundConfig ParseConfig(string configJson) =>

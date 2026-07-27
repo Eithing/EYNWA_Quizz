@@ -25,6 +25,13 @@ public interface IFeatureEngine
 
     bool IsManualValidation(string configJson);
 
+    /// <summary>Un joueur qui se trompe peut-il retenter sa chance sur la même question ? Faux par défaut (une seule tentative).</summary>
+    bool AllowsRetryAfterWrongAnswer(string configJson) => false;
+
+    /// <summary>Délai minimum (secondes) avant qu'un joueur qui s'est trompé puisse retenter sa chance. 0 par défaut (immédiat).
+    /// Sans effet si AllowsRetryAfterWrongAnswer est faux.</summary>
+    int GetRetryCooldownSeconds(string configJson) => 0;
+
     /// <summary>Version de Question.PayloadJson sûre à envoyer aux joueurs (sans les réponses acceptées ni tout autre champ réservé au GM).</summary>
     string BuildPublicPayloadJson(string payloadJson);
 
@@ -44,4 +51,10 @@ public interface IFeatureEngine
     /// joueurs jusqu'au bout du minuteur normal (ex: zoom-image saute au palier final plutôt qu'à zéro).
     /// </summary>
     double GetFastForwardTargetElapsedSeconds(string configJson);
+
+    /// <summary>Les points dépendent-ils du rang d'arrivée parmi les bonnes réponses plutôt que du temps/palier ? Faux par défaut.</summary>
+    bool UsesRankBasedScoring(string configJson) => false;
+
+    /// <summary>Points pour le n-ième joueur à répondre correctement (rang 0-based : 0 = premier). Sans effet si UsesRankBasedScoring est faux.</summary>
+    int PointsForRank(string configJson, int correctAnswerRank) => 0;
 }

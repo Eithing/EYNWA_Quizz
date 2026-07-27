@@ -130,6 +130,31 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
     }
 
     [Authorize]
+    [HttpGet("{id:int}/pending-round-preview")]
+    public async Task<ActionResult<RoundPreviewDto>> GetPendingRoundPreview(int id)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        if (session.Status != GameSessionStatus.AwaitingTargetPlayer)
+        {
+            return BadRequest("La session n'attend pas la désignation d'un joueur.");
+        }
+
+        var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
+        if (round is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(new RoundPreviewDto(round.Title, round.FeatureTypeKey, question?.PayloadJson));
+    }
+
+    [Authorize]
     [HttpPost("{id:int}/pause")]
     public async Task<ActionResult<GameSessionStateDto>> Pause(int id)
     {
@@ -252,13 +277,13 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         return Ok(new CurrentQuestionAdminDto(
             round.Id, round.Title, round.FeatureTypeKey,
             question.Id, question.PayloadJson, round.ConfigJson,
-            state.CurrentLevel, state.CurrentPoints, state.SecondsRemainingInStep, state.IsAnswerWindowOpen,
+            state.CurrentLevel, state.CurrentPoints, state.SecondsRemainingInStep, state.SecondsRemainingTotal, state.IsAnswerWindowOpen,
             engine.IsBuzzerMode(round.ConfigJson), correctFinders));
     }
 
     [Authorize]
-    [HttpGet("{id:int}/pending-answers")]
-    public async Task<ActionResult<List<PendingAnswerDto>>> GetPendingAnswers(int id)
+    [HttpGet("{id:int}/current-question-answers")]
+    public async Task<ActionResult<List<AnswerFeedDto>>> GetCurrentQuestionAnswers(int id)
     {
         var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
         if (loaded is null)
@@ -266,15 +291,29 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return NotFound();
         }
 
-        var pending = await db.Answers
+        var (session, quiz) = loaded.Value;
+        var (_, question) = GetCurrentRoundAndQuestion(quiz, session);
+        if (question is null)
+        {
+            return Ok(new List<AnswerFeedDto>());
+        }
+
+        var answers = await db.Answers
             .Include(a => a.Player)
-            .Where(a => a.SessionId == id && a.IsCorrect == null)
+            .Where(a => a.SessionId == id && a.QuestionId == question.Id)
             .OrderBy(a => a.SubmittedAt)
             .ToListAsync();
 
-        return Ok(pending.Select(a => new PendingAnswerDto(a.Id, a.PlayerId, a.Player!.Pseudo, a.RawAnswer, a.SubmittedAt, a.PendingPoints)).ToList());
+        return Ok(answers
+            .Select(a => new AnswerFeedDto(a.Id, a.PlayerId, a.Player!.Pseudo, a.RawAnswer, a.IsCorrect, a.PointsAwarded, a.PendingPoints, a.SubmittedAt))
+            .ToList());
     }
 
+    /// <summary>
+    /// Juge une réponse (première validation en mode Manuel) ou corrige un verdict déjà posé — y compris une
+    /// réponse évaluée automatiquement, si le GM estime que la tolérance aux fautes s'est trompée, même après
+    /// la fermeture de la fenêtre de réponse.
+    /// </summary>
     [Authorize]
     [HttpPost("{id:int}/answers/{answerId:int}/validate")]
     public async Task<ActionResult<PlayerDto>> ValidateAnswer(int id, int answerId, ValidateAnswerRequest request)
@@ -285,24 +324,42 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return NotFound();
         }
 
-        var answer = await db.Answers.SingleOrDefaultAsync(a => a.Id == answerId && a.SessionId == id);
+        var answer = await db.Answers
+            .Include(a => a.Question).ThenInclude(q => q!.Round)
+            .SingleOrDefaultAsync(a => a.Id == answerId && a.SessionId == id);
         if (answer is null)
         {
             return NotFound();
         }
 
-        if (answer.IsCorrect is not null)
+        var wasPending = answer.IsCorrect is null;
+
+        // En scoring au rang, le rang n'est connu qu'au moment de la validation (l'ordre de validation
+        // par le GM peut différer de l'ordre d'envoi) : recalculé ici plutôt que de figer PendingPoints.
+        var points = answer.PendingPoints;
+        if (request.IsCorrect && answer.Question?.Round is { } round)
         {
-            return Conflict("Cette réponse a déjà été validée.");
+            var engine = engineRegistry.Get(round.FeatureTypeKey);
+            if (engine.UsesRankBasedScoring(round.ConfigJson))
+            {
+                var rank = await db.Answers.CountAsync(a => a.QuestionId == answer.QuestionId && a.IsCorrect == true && a.Id != answer.Id);
+                points = engine.PointsForRank(round.ConfigJson, rank);
+            }
         }
 
         answer.IsCorrect = request.IsCorrect;
-        answer.PointsAwarded = request.IsCorrect ? answer.PendingPoints : 0;
+        answer.PointsAwarded = request.IsCorrect ? points : 0;
         answer.ValidatedByGmAt = DateTime.UtcNow;
+
+        var (session, _) = loaded.Value;
+        if (wasPending)
+        {
+            // Ne reprend le minuteur que si c'était la dernière réponse en attente de jugement pour cette question.
+            await ResumeAfterReviewIfClearAsync(session, answer.QuestionId, excludingAnswerId: answer.Id);
+        }
 
         await db.SaveChangesAsync();
 
-        var (session, _) = loaded.Value;
         var playerDto = await BuildPlayerDto(answer.PlayerId, session.Id, answer.Player?.Pseudo);
         await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", playerDto);
 
@@ -333,7 +390,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         var engine = engineRegistry.Get(round.FeatureTypeKey);
         var holderId = session.CurrentBuzzHolderPlayerId.Value;
-        var points = engine.PointsForElapsedSeconds(round.ConfigJson, 0);
+        var points = await ComputePointsIfCorrect(engine, round.ConfigJson, question.Id, 0);
 
         db.Answers.Add(new Answer
         {
@@ -350,6 +407,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         });
 
         session.CurrentBuzzHolderPlayerId = null;
+        await ResumeAfterReviewIfClearAsync(session, question.Id);
         await db.SaveChangesAsync();
 
         if (request.IsCorrect)
@@ -480,14 +538,16 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         var publicPayloadJson = engine.BuildPublicPayloadJson(question.PayloadJson);
 
         var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == connectionToken);
-        var hasAnswered = player is not null &&
-            await db.Answers.AnyAsync(a => a.PlayerId == player.Id && a.QuestionId == question.Id);
+        var lastAnswer = player is null ? null : await GetLastAnswer(player.Id, question.Id);
+        // Bloqué si aucune tentative n'est en cours (correcte ou en attente de validation manuelle),
+        // ou si la dernière tentative était fausse mais qu'aucun nouvel essai n'est encore permis.
+        var hasAnswered = lastAnswer is not null && !await CanPlayerRetryAsync(session, question, engine, round.ConfigJson, lastAnswer);
         var correctFinders = await GetCorrectFinderPseudos(session.Id, question.Id);
         var isSpectator = round.RequiresTargetPlayer && (player is null || session.CurrentRoundTargetPlayerId != player.Id);
 
         return Ok(new PlayerQuestionDto(
             question.Id, round.Title, round.FeatureTypeKey, publicPayloadJson,
-            state.CurrentLevel, state.SecondsRemainingInStep, state.IsAnswerWindowOpen, hasAnswered, correctFinders, isSpectator,
+            state.CurrentLevel, state.SecondsRemainingInStep, state.SecondsRemainingTotal, state.IsAnswerWindowOpen, hasAnswered, correctFinders, isSpectator,
             engine.IsBuzzerMode(round.ConfigJson)));
     }
 
@@ -537,13 +597,15 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return Conflict("Un autre joueur a déjà la main.");
         }
 
-        var alreadyUsedAttempt = await db.Answers.AnyAsync(a => a.PlayerId == player.Id && a.QuestionId == question.Id);
-        if (alreadyUsedAttempt)
+        var lastAnswer = await GetLastAnswer(player.Id, question.Id);
+        if (lastAnswer is not null && !await CanPlayerRetryAsync(session, question, engine, round.ConfigJson, lastAnswer))
         {
             return Conflict("Vous avez déjà utilisé votre tentative sur cette question.");
         }
 
         session.CurrentBuzzHolderPlayerId = player.Id;
+        // Le temps s'arrête tant que le GM n'a pas jugé la réponse orale du joueur qui a la main.
+        PauseForPendingReview(session);
         await db.SaveChangesAsync();
         await BroadcastState(session, quiz);
 
@@ -579,23 +641,25 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return StatusCode(StatusCodes.Status403Forbidden, "Vous êtes spectateur pour cette manche.");
         }
 
-        var alreadyAnswered = await db.Answers.AnyAsync(a => a.PlayerId == player.Id && a.QuestionId == question.Id);
-        if (alreadyAnswered)
-        {
-            return Conflict("Réponse déjà envoyée pour cette question.");
-        }
-
         var engine = engineRegistry.Get(round.FeatureTypeKey);
         if (engine.IsBuzzerMode(round.ConfigJson))
         {
             return BadRequest("Cette question se joue au buzzer : utilisez le bouton dédié.");
         }
 
+        var lastAnswer = await GetLastAnswer(player.Id, question.Id);
+        if (lastAnswer is not null && !await CanPlayerRetryAsync(session, question, engine, round.ConfigJson, lastAnswer))
+        {
+            return Conflict("Réponse déjà envoyée pour cette question.");
+        }
+
         var submittedAt = DateTime.UtcNow;
 
         var elapsedSeconds = SessionTiming.ComputeElapsedSeconds(session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
-        var pendingPoints = engine.PointsForElapsedSeconds(round.ConfigJson, elapsedSeconds);
+        // Calculé AVANT d'insérer cette réponse : en scoring au rang, le rang doit exclure la tentative en cours.
+        var pendingPoints = await ComputePointsIfCorrect(engine, round.ConfigJson, question.Id, elapsedSeconds);
         var evaluation = engine.Evaluate(round.ConfigJson, question.PayloadJson, request.RawAnswer, session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
+        var pointsAwarded = evaluation.IsCorrect == true ? pendingPoints : 0;
 
         var answer = new Answer
         {
@@ -605,12 +669,19 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             RawAnswer = request.RawAnswer,
             IsCorrect = evaluation.IsCorrect,
             PendingPoints = pendingPoints,
-            PointsAwarded = evaluation.PointsAwarded,
+            PointsAwarded = pointsAwarded,
             ValidationMode = engine.IsManualValidation(round.ConfigJson) ? AnswerValidationMode.Manual : AnswerValidationMode.Auto,
             SubmittedAt = submittedAt
         };
 
         db.Answers.Add(answer);
+
+        if (evaluation.IsCorrect is null)
+        {
+            // Le temps s'arrête tant que le GM n'a pas jugé cette réponse en attente de validation manuelle.
+            PauseForPendingReview(session);
+        }
+
         await db.SaveChangesAsync();
 
         if (evaluation.IsCorrect is not null)
@@ -623,7 +694,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             await hub.Clients.Group(session.InviteToken).SendAsync("AnswerPendingValidation");
         }
 
-        return Ok(new SubmitAnswerResponse(evaluation.IsCorrect, evaluation.PointsAwarded, answer.ValidationMode.ToString()));
+        return Ok(new SubmitAnswerResponse(evaluation.IsCorrect, pointsAwarded, answer.ValidationMode.ToString()));
     }
 
     // ------------------------------------------------------------------
@@ -737,6 +808,14 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
     private async Task<bool> FastForwardIfAllPlayersAnswered(GameSession session, Round round, Question question, IFeatureEngine engine)
     {
+        // Le temps est gelé pour une revue GM en cours (validation manuelle ou buzzer) : ne pas
+        // recalculer CurrentQuestionStartedAt tant que ce gel n'a pas été levé, sous peine de le
+        // réécrire en boucle à chaque sondage tant que PausedAt reste posé.
+        if (session.PausedAt is not null)
+        {
+            return false;
+        }
+
         if (!await AllPlayersAnsweredCorrectly(session, round, question))
         {
             return false;
@@ -752,6 +831,103 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         session.CurrentQuestionStartedAt = DateTime.UtcNow.AddSeconds(-target);
         return true;
     }
+
+    /// <summary>
+    /// Un joueur qui s'est déjà trompé sur cette question peut-il retenter sa chance maintenant ?
+    /// Vrai immédiatement si la manche l'autorise sans délai (retry écrit classique). En mode buzzer
+    /// avec un délai configuré, vrai seulement une fois le délai écoulé — sauf si tous les autres
+    /// joueurs ont déjà utilisé leur tentative, auquel cas plus personne ne peut le devancer de toute façon.
+    /// </summary>
+    private async Task<bool> CanPlayerRetryAsync(GameSession session, Question question, IFeatureEngine engine, string configJson, Answer lastAnswer)
+    {
+        if (lastAnswer.IsCorrect != false)
+        {
+            return false;
+        }
+
+        if (!engine.AllowsRetryAfterWrongAnswer(configJson))
+        {
+            return false;
+        }
+
+        var cooldown = engine.GetRetryCooldownSeconds(configJson);
+        if (cooldown <= 0)
+        {
+            return true;
+        }
+
+        var elapsedSinceWrongAnswer = (DateTime.UtcNow - lastAnswer.SubmittedAt).TotalSeconds;
+        if (elapsedSinceWrongAnswer >= cooldown)
+        {
+            return true;
+        }
+
+        var otherPlayerIds = session.Players.Where(p => p.Id != lastAnswer.PlayerId).Select(p => p.Id).ToList();
+        if (otherPlayerIds.Count == 0)
+        {
+            return true;
+        }
+
+        var answeredOtherIds = await db.Answers
+            .Where(a => a.QuestionId == question.Id && otherPlayerIds.Contains(a.PlayerId))
+            .Select(a => a.PlayerId)
+            .Distinct()
+            .ToListAsync();
+
+        return otherPlayerIds.All(answeredOtherIds.Contains);
+    }
+
+    /// <summary>
+    /// Points qu'une réponse rapporterait si elle était jugée correcte maintenant. En scoring au rang, le rang
+    /// est le nombre de bonnes réponses déjà enregistrées pour cette question (0 = premier) ; sinon la valeur
+    /// classique (palier de zoom / points fixes) au temps écoulé donné.
+    /// </summary>
+    private async Task<int> ComputePointsIfCorrect(IFeatureEngine engine, string configJson, int questionId, double elapsedSeconds)
+    {
+        if (engine.UsesRankBasedScoring(configJson))
+        {
+            var rank = await db.Answers.CountAsync(a => a.QuestionId == questionId && a.IsCorrect == true);
+            return engine.PointsForRank(configJson, rank);
+        }
+
+        return engine.PointsForElapsedSeconds(configJson, elapsedSeconds);
+    }
+
+    /// <summary>Gèle le minuteur pendant qu'une réponse attend le jugement du GM (validation manuelle ou buzzer).
+    /// Sans effet si déjà en pause (GM ou une autre réponse en attente) : on ne déplace pas le point de gel.</summary>
+    private static void PauseForPendingReview(GameSession session) => session.PausedAt ??= DateTime.UtcNow;
+
+    /// <summary>Reprend le minuteur là où il s'était arrêté, mais seulement si plus aucune réponse de cette
+    /// question n'attend de jugement et que personne ne tient le buzzer — sinon une autre réponse est encore
+    /// en cours d'examen et le temps doit rester gelé.</summary>
+    private async Task ResumeAfterReviewIfClearAsync(GameSession session, int questionId, int? excludingAnswerId = null)
+    {
+        if (session.Status != GameSessionStatus.Running || session.PausedAt is null)
+        {
+            return;
+        }
+
+        // excludingAnswerId : la réponse en cours de jugement par l'appelant n'est pas encore
+        // persistée en base à cet instant (SaveChangesAsync n'a pas encore été appelé) — sans cette
+        // exclusion, la requête la trouverait toujours "en attente" (IsCorrect NULL côté base) et le
+        // minuteur resterait bloqué en pause indéfiniment.
+        var stillPending = await db.Answers
+            .AnyAsync(a => a.QuestionId == questionId && a.IsCorrect == null && a.Id != excludingAnswerId);
+        if (stillPending || session.CurrentBuzzHolderPlayerId is not null)
+        {
+            return;
+        }
+
+        var pausedDuration = DateTime.UtcNow - session.PausedAt.Value;
+        session.CurrentQuestionStartedAt = session.CurrentQuestionStartedAt!.Value + pausedDuration;
+        session.PausedAt = null;
+    }
+
+    private async Task<Answer?> GetLastAnswer(int playerId, int questionId) =>
+        await db.Answers
+            .Where(a => a.PlayerId == playerId && a.QuestionId == questionId)
+            .OrderByDescending(a => a.SubmittedAt)
+            .FirstOrDefaultAsync();
 
     private async Task<List<string>> GetCorrectFinderPseudos(int sessionId, int questionId) =>
         await db.Answers

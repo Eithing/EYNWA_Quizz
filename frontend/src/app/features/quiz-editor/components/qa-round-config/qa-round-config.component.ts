@@ -7,10 +7,26 @@ interface QaRoundConfig {
   answerTimeSeconds: number;
   points: number;
   buzzerMode: boolean;
+  allowRetry: boolean;
+  buzzerRetryCooldownSeconds: number;
+  rankBasedScoring: boolean;
+  rankMaxPoints: number;
+  rankPointsDecrement: number;
 }
 
 function defaultConfig(): QaRoundConfig {
-  return { validationMode: 'Auto', autoAdvance: false, answerTimeSeconds: 20, points: 100, buzzerMode: false };
+  return {
+    validationMode: 'Auto',
+    autoAdvance: false,
+    answerTimeSeconds: 20,
+    points: 100,
+    buzzerMode: false,
+    allowRetry: false,
+    buzzerRetryCooldownSeconds: 0,
+    rankBasedScoring: false,
+    rankMaxPoints: 100,
+    rankPointsDecrement: 10
+  };
 }
 
 @Component({
@@ -63,6 +79,31 @@ export class QaRoundConfigComponent {
 
   protected onBuzzerModeChange(value: boolean): void {
     this.config.update((c) => ({ ...c, buzzerMode: value }));
+    this.emit();
+  }
+
+  protected onAllowRetryChange(value: boolean): void {
+    this.config.update((c) => ({ ...c, allowRetry: value }));
+    this.emit();
+  }
+
+  protected onBuzzerRetryCooldownChange(value: number): void {
+    this.config.update((c) => ({ ...c, buzzerRetryCooldownSeconds: value }));
+    this.emit();
+  }
+
+  protected onRankBasedScoringChange(value: boolean): void {
+    this.config.update((c) => ({ ...c, rankBasedScoring: value }));
+    this.emit();
+  }
+
+  protected onRankMaxPointsChange(value: number): void {
+    this.config.update((c) => ({ ...c, rankMaxPoints: value }));
+    this.emit();
+  }
+
+  protected onRankPointsDecrementChange(value: number): void {
+    this.config.update((c) => ({ ...c, rankPointsDecrement: value }));
     this.emit();
   }
 }

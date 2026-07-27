@@ -3,14 +3,15 @@ import { ActivatedRoute } from '@angular/router';
 import { GameSignalrService } from '../../core/services/game-signalr.service';
 import { MediaService } from '../../core/services/media.service';
 import { SessionService } from '../../core/services/session.service';
-import { CurrentQuestionAdmin, GameSessionState, PendingAnswer } from '../../models/session.model';
+import { AnswerFeedItem, CurrentQuestionAdmin, GameSessionState, RoundPreview } from '../../models/session.model';
+import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
 
 const POLL_INTERVAL_MS = 1000;
 
 @Component({
   selector: 'app-host-live',
-  imports: [UiCardComponent],
+  imports: [UiCardComponent, AudioPlayerComponent],
   templateUrl: './host-live.component.html',
   styleUrl: './host-live.component.scss'
 })
@@ -20,8 +21,50 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected readonly state = signal<GameSessionState | null>(null);
   protected readonly currentQuestion = signal<CurrentQuestionAdmin | null>(null);
-  protected readonly pendingAnswers = signal<PendingAnswer[]>([]);
+  protected readonly answerFeed = signal<AnswerFeedItem[]>([]);
+  protected readonly pendingRoundPreview = signal<RoundPreview | null>(null);
   protected readonly copied = signal(false);
+  protected readonly adjustingPlayerId = signal<number | null>(null);
+  protected readonly adjustDelta = signal(0);
+  protected readonly adjustReason = signal('');
+
+  protected readonly pendingRoundImageUrl = computed(() => {
+    const preview = this.pendingRoundPreview();
+    if (!preview || preview.featureTypeKey !== 'zoom-image' || !preview.firstQuestionPayloadJson) {
+      return null;
+    }
+    try {
+      const imageUrl = JSON.parse(preview.firstQuestionPayloadJson).imageUrl as string;
+      return imageUrl ? this.mediaService.resolveUrl(imageUrl) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  protected readonly pendingRoundQaText = computed(() => {
+    const preview = this.pendingRoundPreview();
+    if (!preview || preview.featureTypeKey !== 'qa-text' || !preview.firstQuestionPayloadJson) {
+      return null;
+    }
+    try {
+      return (JSON.parse(preview.firstQuestionPayloadJson) as { questionText: string }).questionText;
+    } catch {
+      return null;
+    }
+  });
+
+  protected readonly pendingRoundAudioUrl = computed(() => {
+    const preview = this.pendingRoundPreview();
+    if (!preview || preview.featureTypeKey !== 'blind-test' || !preview.firstQuestionPayloadJson) {
+      return null;
+    }
+    try {
+      const audioUrl = JSON.parse(preview.firstQuestionPayloadJson).audioUrl as string;
+      return audioUrl ? this.mediaService.resolveUrl(audioUrl) : null;
+    } catch {
+      return null;
+    }
+  });
 
   protected readonly currentImageUrl = computed(() => {
     const question = this.currentQuestion();
@@ -48,6 +91,19 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     }
   });
 
+  protected readonly currentBlindTestPayload = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'blind-test') {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(question.payloadJson) as { audioUrl: string; acceptedAnswers: string[] };
+      return { ...parsed, resolvedAudioUrl: this.mediaService.resolveUrl(parsed.audioUrl) };
+    } catch {
+      return null;
+    }
+  });
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly sessionService: SessionService,
@@ -61,7 +117,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.sessionService.getStateAsGm(this.sessionId).subscribe(async (state) => {
       this.state.set(state);
       this.refreshCurrentQuestion();
-      this.refreshPendingAnswers();
+      this.refreshAnswerFeed();
 
       await this.signalrService.connect(state.inviteToken);
       this.signalrService.onStateChanged((updated) => {
@@ -80,9 +136,9 @@ export class HostLiveComponent implements OnInit, OnDestroy {
               }
             : s
         );
-        this.refreshPendingAnswers();
+        this.refreshAnswerFeed();
       });
-      this.signalrService.onAnswerPendingValidation(() => this.refreshPendingAnswers());
+      this.signalrService.onAnswerPendingValidation(() => this.refreshAnswerFeed());
     });
 
     // Filet de sécurité indépendant de SignalR : si un message temps réel est manqué, l'écran
@@ -99,7 +155,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.sessionService.getStateAsGm(this.sessionId).subscribe((state) => {
       this.state.set(state);
       this.refreshCurrentQuestion();
-      this.refreshPendingAnswers();
+      this.refreshAnswerFeed();
     });
   }
 
@@ -144,9 +200,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.sessionService.resolveBuzz(this.sessionId, isCorrect).subscribe((state) => this.applyState(state));
   }
 
-  protected validateAnswer(answer: PendingAnswer, isCorrect: boolean): void {
+  protected setAnswerVerdict(answer: AnswerFeedItem, isCorrect: boolean): void {
     this.sessionService.validateAnswer(this.sessionId, answer.id, isCorrect).subscribe(() => {
-      this.pendingAnswers.update((answers) => answers.filter((a) => a.id !== answer.id));
+      this.refreshAnswerFeed();
+      this.refreshCurrentQuestion();
     });
   }
 
@@ -157,6 +214,18 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   private refreshCurrentQuestion(): void {
     const state = this.state();
+
+    if (state?.status === 'AwaitingTargetPlayer') {
+      this.currentQuestion.set(null);
+      this.sessionService.getPendingRoundPreview(this.sessionId).subscribe({
+        next: (preview) => this.pendingRoundPreview.set(preview),
+        error: () => this.pendingRoundPreview.set(null)
+      });
+      return;
+    }
+
+    this.pendingRoundPreview.set(null);
+
     if (!state || state.status !== 'Running') {
       this.currentQuestion.set(null);
       return;
@@ -168,7 +237,30 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     });
   }
 
-  private refreshPendingAnswers(): void {
-    this.sessionService.getPendingAnswers(this.sessionId).subscribe((answers) => this.pendingAnswers.set(answers));
+  protected startAdjustScore(playerId: number): void {
+    this.adjustingPlayerId.set(playerId);
+    this.adjustDelta.set(0);
+    this.adjustReason.set('');
+  }
+
+  protected cancelAdjustScore(): void {
+    this.adjustingPlayerId.set(null);
+  }
+
+  protected confirmAdjustScore(): void {
+    const playerId = this.adjustingPlayerId();
+    const delta = this.adjustDelta();
+    if (playerId === null || delta === 0) {
+      return;
+    }
+
+    this.sessionService.adjustScore(this.sessionId, playerId, delta, this.adjustReason() || 'Ajustement manuel').subscribe(() => {
+      this.adjustingPlayerId.set(null);
+      this.refreshState();
+    });
+  }
+
+  private refreshAnswerFeed(): void {
+    this.sessionService.getCurrentQuestionAnswers(this.sessionId).subscribe((answers) => this.answerFeed.set(answers));
   }
 }

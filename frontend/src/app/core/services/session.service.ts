@@ -2,12 +2,13 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { environment } from '../../../environments/environment';
 import {
+  AnswerFeedItem,
   CurrentQuestionAdmin,
   GameSessionState,
   JoinSessionResponse,
-  PendingAnswer,
   Player,
   PlayerQuestion,
+  RoundPreview,
   SubmitAnswerResponse
 } from '../../models/session.model';
 
@@ -55,12 +56,16 @@ export class SessionService {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/buzzer/resolve`, { isCorrect });
   }
 
+  getPendingRoundPreview(sessionId: number) {
+    return this.http.get<RoundPreview>(`${this.baseUrl}/${sessionId}/pending-round-preview`);
+  }
+
   getCurrentQuestionFull(sessionId: number) {
     return this.http.get<CurrentQuestionAdmin>(`${this.baseUrl}/${sessionId}/current-question-full`);
   }
 
-  getPendingAnswers(sessionId: number) {
-    return this.http.get<PendingAnswer[]>(`${this.baseUrl}/${sessionId}/pending-answers`);
+  getCurrentQuestionAnswers(sessionId: number) {
+    return this.http.get<AnswerFeedItem[]>(`${this.baseUrl}/${sessionId}/current-question-answers`);
   }
 
   validateAnswer(sessionId: number, answerId: number, isCorrect: boolean) {

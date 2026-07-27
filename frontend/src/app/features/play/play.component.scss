@@ -63,6 +63,15 @@
   }
 }
 
+.play__timing {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 .play__spectator {
   margin-top: 16px;
 }

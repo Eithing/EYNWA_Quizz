@@ -61,8 +61,7 @@ namespace QuizParty.Api.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.HasIndex("PlayerId", "QuestionId")
-                        .IsUnique();
+                    b.HasIndex("PlayerId", "QuestionId");
 
                     b.ToTable("Answers");
                 });

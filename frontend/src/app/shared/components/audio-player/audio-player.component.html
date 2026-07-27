@@ -1,0 +1,13 @@
+<div class="audio-player">
+  <audio #audioEl [src]="audioUrl()" (play)="onPlay()" (ended)="onEnded()" (pause)="onEnded()"></audio>
+
+  <button type="button" class="audio-player__btn" [disabled]="playing()" (click)="play()">
+    @if (playing()) {
+      🔊 Lecture en cours…
+    } @else if (hasPlayedOnce()) {
+      🔁 Réécouter
+    } @else {
+      ▶ Écouter
+    }
+  </button>
+</div>

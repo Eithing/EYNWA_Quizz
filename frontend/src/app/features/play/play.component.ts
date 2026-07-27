@@ -5,6 +5,7 @@ import { GameSignalrService } from '../../core/services/game-signalr.service';
 import { MediaService } from '../../core/services/media.service';
 import { SessionService } from '../../core/services/session.service';
 import {
+  BlindTestPublicPayload,
   GameSessionState,
   JoinSessionResponse,
   PlayerQuestion,
@@ -12,6 +13,7 @@ import {
   SubmitAnswerResponse,
   ZoomPublicPayload
 } from '../../models/session.model';
+import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
 import { ZoomViewerComponent } from '../../shared/components/zoom-viewer/zoom-viewer.component';
 
@@ -19,7 +21,7 @@ const POLL_INTERVAL_MS = 800;
 
 @Component({
   selector: 'app-play',
-  imports: [FormsModule, UiCardComponent, ZoomViewerComponent],
+  imports: [FormsModule, UiCardComponent, ZoomViewerComponent, AudioPlayerComponent],
   templateUrl: './play.component.html',
   styleUrl: './play.component.scss'
 })
@@ -52,9 +54,19 @@ export class PlayComponent implements OnInit, OnDestroy {
     return question?.featureTypeKey === 'qa-text' ? JSON.parse(question.publicPayloadJson) : null;
   });
 
+  protected readonly blindTestPayload = computed<BlindTestPublicPayload | null>(() => {
+    const question = this.question();
+    return question?.featureTypeKey === 'blind-test' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
   protected readonly resolvedImageUrl = computed(() => {
     const payload = this.zoomPayload();
     return payload ? this.mediaService.resolveUrl(payload.imageUrl) : '';
+  });
+
+  protected readonly resolvedAudioUrl = computed(() => {
+    const payload = this.blindTestPayload();
+    return payload ? this.mediaService.resolveUrl(payload.audioUrl) : '';
   });
 
   constructor(
@@ -158,7 +170,16 @@ export class PlayComponent implements OnInit, OnDestroy {
     }
 
     this.sessionService.getCurrentQuestionForPlayer(this.token, this.playerInfo.connectionToken).subscribe({
-      next: (question) => this.question.set(question),
+      next: (question) => {
+        const previous = this.question();
+        // Une nouvelle tentative vient de s'ouvrir (réponse fausse + retry autorisé) : on efface
+        // l'ancien résultat/la saisie précédente pour laisser la place à un nouvel essai.
+        if (previous?.questionId === question.questionId && previous.hasAnswered && !question.hasAnswered) {
+          this.answer.set('');
+          this.result.set(null);
+        }
+        this.question.set(question);
+      },
       error: () => this.question.set(null)
     });
   }

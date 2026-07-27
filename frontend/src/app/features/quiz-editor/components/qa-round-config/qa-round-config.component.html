@@ -26,20 +26,81 @@
       />
     </div>
 
-    <div class="form-field">
-      <label for="qa-points">Points par bonne réponse</label>
-      <input
-        id="qa-points"
-        type="number"
-        min="0"
-        [value]="config().points"
-        (input)="onPointsChange($any($event.target).valueAsNumber)"
-      />
-    </div>
+    @if (!config().rankBasedScoring) {
+      <div class="form-field">
+        <label for="qa-points">Points par bonne réponse</label>
+        <input
+          id="qa-points"
+          type="number"
+          min="0"
+          [value]="config().points"
+          (input)="onPointsChange($any($event.target).valueAsNumber)"
+        />
+      </div>
+    }
   </div>
+
+  @if (!config().buzzerMode) {
+    <label class="qa-round-config__checkbox">
+      <input type="checkbox" [checked]="config().rankBasedScoring" (change)="onRankBasedScoringChange($any($event.target).checked)" />
+      Points dégressifs selon l'ordre d'arrivée (1er = max, puis -X par rang)
+    </label>
+
+    @if (config().rankBasedScoring) {
+      <div class="qa-round-config__row">
+        <div class="form-field">
+          <label for="qa-rank-max-points">Points du 1er</label>
+          <input
+            id="qa-rank-max-points"
+            type="number"
+            min="0"
+            [value]="config().rankMaxPoints"
+            (input)="onRankMaxPointsChange($any($event.target).valueAsNumber)"
+          />
+        </div>
+
+        <div class="form-field">
+          <label for="qa-rank-decrement">Dégressif par rang</label>
+          <input
+            id="qa-rank-decrement"
+            type="number"
+            min="0"
+            [value]="config().rankPointsDecrement"
+            (input)="onRankPointsDecrementChange($any($event.target).valueAsNumber)"
+          />
+        </div>
+      </div>
+    }
+  }
 
   <label class="qa-round-config__checkbox">
     <input type="checkbox" [checked]="config().autoAdvance" (change)="onAutoAdvanceChange($any($event.target).checked)" />
     Passer automatiquement à la question suivante une fois le temps écoulé
   </label>
+
+  <label class="qa-round-config__checkbox">
+    <input type="checkbox" [checked]="config().allowRetry" (change)="onAllowRetryChange($any($event.target).checked)" />
+    @if (config().buzzerMode) {
+      Autoriser un joueur éliminé à re-buzzer sur la même question
+    } @else {
+      Autoriser plusieurs tentatives en cas de réponse fausse
+    }
+  </label>
+
+  @if (config().buzzerMode && config().allowRetry) {
+    <div class="form-field qa-round-config__retry-delay">
+      <label for="qa-buzzer-retry-cooldown">Délai avant de pouvoir re-buzzer (s)</label>
+      <input
+        id="qa-buzzer-retry-cooldown"
+        type="number"
+        min="0"
+        [value]="config().buzzerRetryCooldownSeconds"
+        (input)="onBuzzerRetryCooldownChange($any($event.target).valueAsNumber)"
+      />
+      <p class="qa-round-config__hint">
+        0 = re-buzz immédiat. Si tous les autres joueurs ont déjà buzzé avant la fin du délai, le joueur éliminé
+        redevient éligible tout de suite (plus personne ne peut le devancer).
+      </p>
+    </div>
+  }
 </div>

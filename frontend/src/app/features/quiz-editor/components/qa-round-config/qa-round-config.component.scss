@@ -18,3 +18,13 @@
   color: var(--text-secondary);
   cursor: pointer;
 }
+
+.qa-round-config__retry-delay {
+  max-width: 320px;
+}
+
+.qa-round-config__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}

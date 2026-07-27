@@ -49,6 +49,22 @@
         }
 
         @if (s.status === 'AwaitingTargetPlayer') {
+          @if (pendingRoundPreview(); as preview) {
+            <p class="host-live__question-title">{{ preview.roundTitle }}</p>
+
+            @if (pendingRoundImageUrl(); as imageUrl) {
+              <img [src]="imageUrl" alt="Aperçu de la première question" class="host-live__image" />
+            }
+
+            @if (pendingRoundQaText(); as text) {
+              <p class="host-live__qa-text">{{ text }}</p>
+            }
+
+            @if (pendingRoundAudioUrl(); as audioUrl) {
+              <app-audio-player [audioUrl]="audioUrl" />
+            }
+          }
+
           <p class="host-live__hint">Cette manche est réservée à un joueur. Choisissez-le pour la démarrer :</p>
           <ul class="host-live__target-picker">
             @for (player of s.players; track player.id) {
@@ -75,12 +91,20 @@
             }
           }
 
+          @if (currentBlindTestPayload(); as blindTest) {
+            <app-audio-player [audioUrl]="blindTest.resolvedAudioUrl" />
+            @if (blindTest.acceptedAnswers.length > 0) {
+              <p class="host-live__qa-hint">Réponses acceptées : {{ blindTest.acceptedAnswers.join(', ') }}</p>
+            }
+          }
+
           <div class="host-live__metrics">
             @if (question.featureTypeKey === 'zoom-image') {
               <span>Niveau de zoom : {{ question.currentLevel }}</span>
               <span>Prochain palier dans : {{ question.secondsRemainingInStep }}s</span>
+              <span>Temps total restant : {{ question.secondsRemainingTotal }}s</span>
             } @else {
-              <span>Temps restant : {{ question.secondsRemainingInStep }}s</span>
+              <span>Temps restant : {{ question.secondsRemainingTotal }}s</span>
             }
             <span>Points si trouvé maintenant : {{ question.currentPoints }}</span>
             <span>Fenêtre de réponse : {{ question.isAnswerWindowOpen ? 'ouverte' : 'fermée' }}</span>
@@ -117,17 +141,23 @@
           <p class="host-live__hint">Chargement…</p>
         }
 
-        @if (pendingAnswers().length > 0) {
+        @if (answerFeed().length > 0) {
           <div class="host-live__pending">
-            <h4>Réponses à valider ({{ pendingAnswers().length }})</h4>
-            @for (answer of pendingAnswers(); track answer.id) {
-              <div class="pending-answer">
+            <h4>Réponses reçues ({{ answerFeed().length }})</h4>
+            @for (answer of answerFeed(); track answer.id) {
+              <div class="pending-answer" [class.pending-answer--correct]="answer.isCorrect === true" [class.pending-answer--incorrect]="answer.isCorrect === false">
                 <span class="pending-answer__pseudo">{{ answer.playerPseudo }}</span>
                 <span class="pending-answer__text">{{ answer.rawAnswer }}</span>
-                <span class="pending-answer__points">{{ answer.pendingPoints }} pts si correct</span>
+                <span class="pending-answer__points">
+                  @if (answer.isCorrect === null) {
+                    {{ answer.pendingPoints }} pts si correct
+                  } @else {
+                    {{ answer.pointsAwarded }} pts
+                  }
+                </span>
                 <div class="pending-answer__actions">
-                  <button type="button" class="btn btn-secondary" (click)="validateAnswer(answer, true)">✓ Correct</button>
-                  <button type="button" class="btn btn-danger" (click)="validateAnswer(answer, false)">✕ Incorrect</button>
+                  <button type="button" class="btn btn-secondary" [disabled]="answer.isCorrect === true" (click)="setAnswerVerdict(answer, true)">✓ Correct</button>
+                  <button type="button" class="btn btn-danger" [disabled]="answer.isCorrect === false" (click)="setAnswerVerdict(answer, false)">✕ Incorrect</button>
                 </div>
               </div>
             }
@@ -143,8 +173,32 @@
           <ol class="host-live__players">
             @for (player of s.players; track player.id) {
               <li>
-                <span>{{ player.pseudo }}</span>
-                <strong>{{ player.score }} pts</strong>
+                <div class="host-live__player-row">
+                  <span>{{ player.pseudo }}</span>
+                  <div class="host-live__player-actions">
+                    <strong>{{ player.score }} pts</strong>
+                    <button type="button" class="host-live__edit-score-btn" title="Modifier les points" (click)="startAdjustScore(player.id)">✎</button>
+                  </div>
+                </div>
+
+                @if (adjustingPlayerId() === player.id) {
+                  <div class="host-live__score-adjust">
+                    <input
+                      type="number"
+                      placeholder="+/- points"
+                      [value]="adjustDelta()"
+                      (input)="adjustDelta.set($any($event.target).valueAsNumber)"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Raison (optionnel)"
+                      [value]="adjustReason()"
+                      (input)="adjustReason.set($any($event.target).value)"
+                    />
+                    <button type="button" class="btn btn-primary" (click)="confirmAdjustScore()">Valider</button>
+                    <button type="button" class="btn btn-secondary" (click)="cancelAdjustScore()">Annuler</button>
+                  </div>
+                }
               </li>
             }
           </ol>

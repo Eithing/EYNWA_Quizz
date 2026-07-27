@@ -12,4 +12,19 @@ public class QaRoundConfig
 
     /// <summary>Question de rapidité : les joueurs buzzent pour obtenir la main, le GM valide toujours à l'oral (pas de saisie écrite).</summary>
     public bool BuzzerMode { get; set; }
+
+    /// <summary>Si vrai, un joueur qui se trompe peut retenter sa chance tant que la fenêtre de réponse est ouverte
+    /// (en mode buzzer : peut re-buzzer, sous réserve de BuzzerRetryCooldownSeconds).</summary>
+    public bool AllowRetry { get; set; }
+
+    /// <summary>Mode buzzer uniquement : délai en secondes avant qu'un joueur éliminé sur cette question puisse re-buzzer.
+    /// Ignoré si AllowRetry est faux. Sans effet sur la réponse écrite classique.</summary>
+    public int BuzzerRetryCooldownSeconds { get; set; }
+
+    /// <summary>Si vrai, les points ne sont plus fixes mais dépendent du rang d'arrivée parmi les bonnes réponses
+    /// (1er = RankMaxPoints, puis -RankPointsDecrement par rang suivant, plancher à 0). Sans effet en mode buzzer
+    /// (une seule bonne réponse possible par question, le rang est toujours 0).</summary>
+    public bool RankBasedScoring { get; set; }
+    public int RankMaxPoints { get; set; } = 100;
+    public int RankPointsDecrement { get; set; } = 10;
 }
