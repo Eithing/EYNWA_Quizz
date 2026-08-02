@@ -17,6 +17,7 @@ using QuizParty.Api.Models;
 using QuizParty.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService(); // no-op sauf si réellement lancé comme service Windows installé
 
 const string ClientCorsPolicy = "ClientCorsPolicy";
 const string ExternalCookieScheme = "ExternalCookie";
@@ -161,11 +162,15 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseCors(ClientCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<GameHub>("/hubs/game");
+app.MapFallbackToFile("index.html"); // routing côté client Angular en prod (wwwroot alimenté au déploiement)
 
 app.Run();
