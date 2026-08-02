@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using AspNet.Security.OAuth.Discord;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuizParty.Api.Data;
@@ -148,6 +149,15 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Derrière cloudflared/Cloudflare : la requête arrive en HTTP en local (TLS déjà terminé par
+// l'edge Cloudflare), donc sans ça, Request.Scheme/Host restent sur des valeurs locales
+// (ex: "localhost:5100") au lieu du vrai hostname public — ça casse le redirect_uri envoyé
+// à Discord OAuth et déclenche une redirection HTTPS interne incorrecte.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+});
 
 if (app.Environment.IsDevelopment())
 {
