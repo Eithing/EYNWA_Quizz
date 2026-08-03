@@ -10,8 +10,11 @@ export interface Round {
   featureTypeKey: string;
   title: string;
   configJson: string;
-  requiresTargetPlayer: boolean;
+  restrictsParticipants: boolean;
   questions: Question[];
+  /** Manche "à thèmes" : ne porte pas de questions directement, contient des sous-manches à la place. */
+  isThemePicker: boolean;
+  subRounds: Round[];
 }
 
 export interface QuizSummary {

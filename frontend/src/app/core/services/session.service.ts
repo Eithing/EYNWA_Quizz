@@ -9,7 +9,8 @@ import {
   Player,
   PlayerQuestion,
   RoundPreview,
-  SubmitAnswerResponse
+  SubmitAnswerResponse,
+  Team
 } from '../../models/session.model';
 
 @Injectable({ providedIn: 'root' })
@@ -48,8 +49,32 @@ export class SessionService {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/scoreboard`, { visible });
   }
 
-  setRoundTargetPlayer(sessionId: number, playerId: number) {
-    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/round-target-player`, { playerId });
+  setRoundParticipants(sessionId: number, playerIds: number[], teamIds: number[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/round-participants`, { playerIds, teamIds });
+  }
+
+  setTeams(sessionId: number, teams: { name: string; playerIds: number[] }[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/teams`, { teams });
+  }
+
+  setTeamScoring(sessionId: number, enabled: boolean) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/team-scoring`, { enabled });
+  }
+
+  adjustTeamScore(sessionId: number, teamId: number, delta: number, reason: string) {
+    return this.http.post<Team>(`${this.baseUrl}/${sessionId}/teams/${teamId}/score-adjustments`, { delta, reason });
+  }
+
+  chooseTheme(sessionId: number, subRoundId: number, playerIds: number[], teamIds: number[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/themes/${subRoundId}/choose`, { playerIds, teamIds });
+  }
+
+  skipTheme(sessionId: number, subRoundId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/themes/${subRoundId}/skip`, {});
+  }
+
+  revealThemes(sessionId: number, subRoundId?: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/themes/reveal`, { subRoundId: subRoundId ?? null });
   }
 
   resolveBuzz(sessionId: number, isCorrect: boolean) {

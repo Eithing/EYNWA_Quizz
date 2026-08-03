@@ -14,4 +14,8 @@ public record PlayerQuestionDto(
     bool HasAnswered,
     List<string> CorrectFinders,
     bool IsSpectator,
-    bool IsBuzzerMode);
+    bool IsBuzzerMode,
+    /// <summary>Position de lecture autoritaire pour l'audio (blind-test) — ignoré par les autres features.</summary>
+    double SecondsElapsedTotal,
+    /// <summary>Minuteur gelé (revue GM en cours ou pause explicite) : l'audio doit se figer pour tout le monde.</summary>
+    bool IsPaused);

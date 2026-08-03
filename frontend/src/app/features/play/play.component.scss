@@ -1,6 +1,6 @@
 .play {
   width: 100%;
-  max-width: 720px;
+  max-width: 960px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -10,6 +10,41 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+// Le classement ne remplace plus jamais la partie en cours — il s'affiche à côté (écrans larges)
+// ou en dessous (mobile, la majorité des joueurs), mais la question reste toujours visible.
+.play__layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.play__layout--with-sidebar {
+  @media (min-width: 700px) {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
+
+.play__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.play__sidebar {
+  width: 100%;
+
+  @media (min-width: 700px) {
+    width: 220px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 16px;
+  }
 }
 
 .play__score {
@@ -25,6 +60,16 @@
   color: var(--text-muted);
   text-align: center;
   padding: 12px 0;
+}
+
+.play__image {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+  border-radius: var(--radius-md);
+  background: var(--bg-app);
+  margin-bottom: 12px;
 }
 
 .play__question-text {
@@ -130,6 +175,33 @@
 
 .play__scoreboard-title {
   margin-bottom: 10px;
+
+  &:not(:first-child) {
+    margin-top: 18px;
+  }
+}
+
+.play__theme-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+  }
+}
+
+.play__theme--done {
+  opacity: 0.6;
+}
+
+.play__theme-status {
+  color: var(--text-muted);
 }
 
 .play__scoreboard {

@@ -106,7 +106,7 @@ public class ZoomImageEngine : IFeatureEngine
         var shouldAutoAdvance = config.AutoAdvance && !isAnswerWindowOpen;
         var secondsRemainingTotal = (int)Math.Ceiling(Math.Max(0, totalRoundDuration - elapsedSeconds));
 
-        return new FeatureRuntimeState(currentLevel, currentPoints, secondsRemainingInStep, secondsRemainingTotal, isAnswerWindowOpen, shouldAutoAdvance);
+        return new FeatureRuntimeState(currentLevel, currentPoints, secondsRemainingInStep, secondsRemainingTotal, isAnswerWindowOpen, shouldAutoAdvance, elapsedSeconds);
     }
 
     private static ZoomRoundConfig ParseConfig(string configJson) =>

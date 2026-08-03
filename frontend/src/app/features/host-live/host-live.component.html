@@ -27,6 +27,11 @@
             {{ s.scoreboardVisible ? 'Masquer les scores' : 'Afficher les scores aux joueurs' }}
           </button>
         }
+        @if (s.teams.length > 0 && s.status !== 'Lobby') {
+          <button type="button" class="btn btn-secondary" (click)="toggleTeamScoring()">
+            {{ s.teamScoringEnabled ? 'Désactiver le mode équipe' : 'Activer le mode équipe' }} (manche en cours)
+          </button>
+        }
       </div>
     </div>
 
@@ -40,15 +45,83 @@
       </div>
     </app-ui-card>
 
+    <app-ui-card>
+      <div class="host-live__teams-header">
+        <h3>Équipes {{ s.teams.length > 0 ? '(' + s.teams.length + ')' : '' }}</h3>
+        @if (!teamBuilderOpen()) {
+          <button type="button" class="btn btn-secondary" (click)="openTeamBuilder()">
+            {{ s.teams.length > 0 ? 'Modifier les équipes' : 'Créer des équipes' }}
+          </button>
+        }
+      </div>
+
+      @if (!teamBuilderOpen()) {
+        @if (s.teams.length === 0) {
+          <p class="host-live__hint">Aucune équipe créée — les manches se jouent en solo.</p>
+        } @else {
+          <ul class="host-live__teams">
+            @for (team of s.teams; track team.id) {
+              <li>
+                <div class="host-live__player-row">
+                  <span>{{ team.name }} — {{ team.playerIds.length }} joueur(s)</span>
+                  <div class="host-live__player-actions">
+                    <strong>{{ team.score }} pts</strong>
+                    <button type="button" class="host-live__edit-score-btn" title="Modifier les points" (click)="startAdjustTeamScore(team.id)">✎</button>
+                  </div>
+                </div>
+                @if (adjustingTeamId() === team.id) {
+                  <div class="host-live__score-adjust">
+                    <input type="number" placeholder="+/- points" [value]="teamAdjustDelta()" (input)="teamAdjustDelta.set($any($event.target).valueAsNumber)" />
+                    <input type="text" placeholder="Raison (optionnel)" [value]="teamAdjustReason()" (input)="teamAdjustReason.set($any($event.target).value)" />
+                    <button type="button" class="btn btn-primary" (click)="confirmAdjustTeamScore()">Valider</button>
+                    <button type="button" class="btn btn-secondary" (click)="cancelAdjustTeamScore()">Annuler</button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <div class="host-live__team-builder">
+          @for (draft of teamDrafts(); track $index) {
+            <div class="host-live__team-draft">
+              <input type="text" placeholder="Nom de l'équipe" [value]="draft.name" (input)="renameTeamDraft($index, $any($event.target).value)" />
+              <button type="button" class="host-live__edit-score-btn" title="Supprimer cette équipe" (click)="removeTeamDraft($index)">✕</button>
+              <div class="host-live__team-draft-players">
+                @for (player of s.players; track player.id) {
+                  <label [class.host-live__team-draft-player--disabled]="isPlayerTakenByOtherDraft($index, player.id)">
+                    <input
+                      type="checkbox"
+                      [checked]="draft.playerIds.has(player.id)"
+                      [disabled]="isPlayerTakenByOtherDraft($index, player.id)"
+                      (change)="toggleDraftPlayer($index, player.id)"
+                    />
+                    {{ player.pseudo }}
+                  </label>
+                }
+              </div>
+            </div>
+          }
+          <div class="host-live__team-builder-actions">
+            <button type="button" class="btn btn-secondary" (click)="addTeamDraft()">+ Ajouter une équipe</button>
+            <div>
+              <button type="button" class="btn btn-secondary" (click)="cancelTeamBuilder()">Annuler</button>
+              <button type="button" class="btn btn-primary" (click)="saveTeams()">Enregistrer les équipes</button>
+            </div>
+          </div>
+        </div>
+      }
+    </app-ui-card>
+
     <div class="host-live__body">
       <app-ui-card>
         <h3>Question en cours</h3>
 
-        @if (s.currentRoundTargetPlayerPseudo) {
-          <p class="host-live__target-banner">🎯 Manche ciblée : <strong>{{ s.currentRoundTargetPlayerPseudo }}</strong> répond, les autres sont spectateurs.</p>
+        @if (participantBanner(); as banner) {
+          <p class="host-live__target-banner">🎯 {{ banner }}</p>
         }
 
-        @if (s.status === 'AwaitingTargetPlayer') {
+        @if (s.status === 'AwaitingParticipants') {
           @if (pendingRoundPreview(); as preview) {
             <p class="host-live__question-title">{{ preview.roundTitle }}</p>
 
@@ -61,19 +134,64 @@
             }
 
             @if (pendingRoundAudioUrl(); as audioUrl) {
-              <app-audio-player [audioUrl]="audioUrl" />
+              <app-audio-player [audioUrl]="audioUrl" [showTimeline]="true" />
+            }
+
+            @if (pendingRoundImageGuessUrl(); as imageUrl) {
+              <img [src]="imageUrl" alt="Aperçu de la première question" class="host-live__image" />
             }
           }
 
-          <p class="host-live__hint">Cette manche est réservée à un joueur. Choisissez-le pour la démarrer :</p>
-          <ul class="host-live__target-picker">
-            @for (player of s.players; track player.id) {
-              <li>
-                <span>{{ player.pseudo }}</span>
-                <button type="button" class="btn btn-primary" (click)="selectTargetPlayer(player.id)">Désigner</button>
+          <p class="host-live__hint">Cette manche est restreinte. Choisissez qui participe pour la démarrer :</p>
+          <app-participant-selector [players]="s.players" [teams]="s.teams" confirmLabel="Démarrer la manche" (confirm)="onSetRoundParticipants($event)" />
+        } @else if (s.status === 'ChoosingTheme') {
+          <p class="host-live__hint">Plateau de thèmes — choisissez le prochain thème et qui y participe.</p>
+          @if (anyThemeHidden()) {
+            <button type="button" class="btn btn-secondary" (click)="revealAllThemes()">Révéler tous les thèmes</button>
+          }
+
+          <ul class="host-live__theme-board">
+            @for (theme of s.themeBoard; track theme.subRoundId) {
+              <li class="host-live__theme" [class.host-live__theme--done]="theme.resolution !== 'Pending'">
+                <div class="host-live__theme-row">
+                  <span class="host-live__theme-title">
+                    {{ theme.title }}
+                    <span
+                      class="host-live__theme-visibility"
+                      [class.host-live__theme-visibility--visible]="theme.isRevealed"
+                      [title]="theme.isRevealed ? 'Visible par les joueurs' : 'Caché aux joueurs'"
+                    >
+                      {{ theme.isRevealed ? '👁 visible aux joueurs' : '🙈 caché aux joueurs' }}
+                    </span>
+                  </span>
+                  <span class="host-live__theme-status">
+                    @if (theme.resolution === 'Played') {
+                      ✓ Joué
+                    } @else if (theme.resolution === 'Skipped') {
+                      ⤼ Skippé
+                    }
+                  </span>
+                </div>
+
+                @if (theme.resolution === 'Pending') {
+                  <div class="host-live__theme-actions">
+                    @if (!theme.isRevealed) {
+                      <button type="button" class="btn btn-secondary" (click)="revealTheme(theme.subRoundId)">Révéler</button>
+                    }
+                    <button type="button" class="btn btn-primary" (click)="toggleThemeSelector(theme.subRoundId)">Choisir ce thème</button>
+                    <button type="button" class="btn btn-secondary" (click)="skipTheme(theme.subRoundId)">Skip</button>
+                  </div>
+
+                  @if (themeSelectorOpenId() === theme.subRoundId) {
+                    <app-participant-selector
+                      [players]="s.players"
+                      [teams]="s.teams"
+                      confirmLabel="Lancer ce thème"
+                      (confirm)="onChooseTheme(theme.subRoundId, $event)"
+                    />
+                  }
+                }
               </li>
-            } @empty {
-              <p class="host-live__hint">Personne n'a encore rejoint pour être désigné.</p>
             }
           </ul>
         } @else if (currentQuestion() !== null) {
@@ -92,9 +210,21 @@
           }
 
           @if (currentBlindTestPayload(); as blindTest) {
-            <app-audio-player [audioUrl]="blindTest.resolvedAudioUrl" />
+            <app-audio-player
+              [audioUrl]="blindTest.resolvedAudioUrl"
+              [syncElapsedSeconds]="question.secondsElapsedTotal"
+              [syncPaused]="question.isPaused"
+              [showTimeline]="true"
+            />
             @if (blindTest.acceptedAnswers.length > 0) {
               <p class="host-live__qa-hint">Réponses acceptées : {{ blindTest.acceptedAnswers.join(', ') }}</p>
+            }
+          }
+
+          @if (currentImageGuessPayload(); as imageGuess) {
+            <img [src]="imageGuess.resolvedImageUrl" alt="Image de la question" class="host-live__image" />
+            @if (imageGuess.acceptedAnswers.length > 0) {
+              <p class="host-live__qa-hint">Réponses acceptées : {{ imageGuess.acceptedAnswers.join(', ') }}</p>
             }
           }
 
@@ -174,9 +304,17 @@
             @for (player of s.players; track player.id) {
               <li>
                 <div class="host-live__player-row">
-                  <span>{{ player.pseudo }}</span>
+                  <span>
+                    {{ player.pseudo }}
+                    @if (player.teamId) {
+                      <span class="host-live__player-team">({{ teamName(player.teamId) }})</span>
+                    }
+                  </span>
                   <div class="host-live__player-actions">
-                    <strong>{{ player.score }} pts</strong>
+                    <strong>{{ player.totalScore }} pts</strong>
+                    @if (player.teamId) {
+                      <span class="host-live__player-breakdown">({{ player.score }} perso + {{ player.teamScore }} équipe)</span>
+                    }
                     <button type="button" class="host-live__edit-score-btn" title="Modifier les points" (click)="startAdjustScore(player.id)">✎</button>
                   </div>
                 </div>

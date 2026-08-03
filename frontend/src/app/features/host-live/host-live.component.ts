@@ -5,13 +5,19 @@ import { MediaService } from '../../core/services/media.service';
 import { SessionService } from '../../core/services/session.service';
 import { AnswerFeedItem, CurrentQuestionAdmin, GameSessionState, RoundPreview } from '../../models/session.model';
 import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
+import { ParticipantSelection, ParticipantSelectorComponent } from '../../shared/components/participant-selector/participant-selector.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
 
 const POLL_INTERVAL_MS = 1000;
 
+interface TeamDraft {
+  name: string;
+  playerIds: Set<number>;
+}
+
 @Component({
   selector: 'app-host-live',
-  imports: [UiCardComponent, AudioPlayerComponent],
+  imports: [UiCardComponent, AudioPlayerComponent, ParticipantSelectorComponent],
   templateUrl: './host-live.component.html',
   styleUrl: './host-live.component.scss'
 })
@@ -27,6 +33,15 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   protected readonly adjustingPlayerId = signal<number | null>(null);
   protected readonly adjustDelta = signal(0);
   protected readonly adjustReason = signal('');
+
+  protected readonly adjustingTeamId = signal<number | null>(null);
+  protected readonly teamAdjustDelta = signal(0);
+  protected readonly teamAdjustReason = signal('');
+
+  protected readonly teamBuilderOpen = signal(false);
+  protected readonly teamDrafts = signal<TeamDraft[]>([]);
+
+  protected readonly themeSelectorOpenId = signal<number | null>(null);
 
   protected readonly pendingRoundImageUrl = computed(() => {
     const preview = this.pendingRoundPreview();
@@ -61,6 +76,19 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     try {
       const audioUrl = JSON.parse(preview.firstQuestionPayloadJson).audioUrl as string;
       return audioUrl ? this.mediaService.resolveUrl(audioUrl) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  protected readonly pendingRoundImageGuessUrl = computed(() => {
+    const preview = this.pendingRoundPreview();
+    if (!preview || preview.featureTypeKey !== 'image-guess' || !preview.firstQuestionPayloadJson) {
+      return null;
+    }
+    try {
+      const imageUrl = JSON.parse(preview.firstQuestionPayloadJson).imageUrl as string;
+      return imageUrl ? this.mediaService.resolveUrl(imageUrl) : null;
     } catch {
       return null;
     }
@@ -104,6 +132,37 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     }
   });
 
+  protected readonly currentImageGuessPayload = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'image-guess') {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(question.payloadJson) as { imageUrl: string; acceptedAnswers: string[] };
+      return { ...parsed, resolvedImageUrl: this.mediaService.resolveUrl(parsed.imageUrl) };
+    } catch {
+      return null;
+    }
+  });
+
+  protected readonly anyThemeHidden = computed(() => (this.state()?.themeBoard ?? []).some((t) => !t.isRevealed));
+
+  protected readonly participantBanner = computed(() => {
+    const s = this.state();
+    if (!s) {
+      return null;
+    }
+    if (s.currentRoundParticipantTeamIds.length > 0) {
+      const names = s.teams.filter((t) => s.currentRoundParticipantTeamIds.includes(t.id)).map((t) => t.name);
+      return names.length > 0 ? `Manche restreinte : ${names.join(', ')} — les autres sont spectateurs.` : null;
+    }
+    if (s.currentRoundParticipantPlayerIds.length > 0) {
+      const names = s.players.filter((p) => s.currentRoundParticipantPlayerIds.includes(p.id)).map((p) => p.pseudo);
+      return names.length > 0 ? `Manche restreinte : ${names.join(', ')} — les autres sont spectateurs.` : null;
+    }
+    return null;
+  });
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly sessionService: SessionService,
@@ -132,7 +191,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
           s
             ? {
                 ...s,
-                players: s.players.map((p) => (p.id === player.id ? player : p)).sort((a, b) => b.score - a.score)
+                players: s.players.map((p) => (p.id === player.id ? player : p)).sort((a, b) => b.totalScore - a.totalScore)
               }
             : s
         );
@@ -157,6 +216,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
       this.refreshCurrentQuestion();
       this.refreshAnswerFeed();
     });
+  }
+
+  protected teamName(teamId: number | null): string {
+    return this.state()?.teams.find((t) => t.id === teamId)?.name ?? '';
   }
 
   protected get inviteUrl(): string {
@@ -192,8 +255,15 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.sessionService.setScoreboardVisible(this.sessionId, !current).subscribe((state) => this.applyState(state));
   }
 
-  protected selectTargetPlayer(playerId: number): void {
-    this.sessionService.setRoundTargetPlayer(this.sessionId, playerId).subscribe((state) => this.applyState(state));
+  protected toggleTeamScoring(): void {
+    const current = this.state()?.teamScoringEnabled ?? false;
+    this.sessionService.setTeamScoring(this.sessionId, !current).subscribe((state) => this.applyState(state));
+  }
+
+  protected onSetRoundParticipants(selection: ParticipantSelection): void {
+    this.sessionService
+      .setRoundParticipants(this.sessionId, selection.playerIds, selection.teamIds)
+      .subscribe((state) => this.applyState(state));
   }
 
   protected resolveBuzz(isCorrect: boolean): void {
@@ -215,7 +285,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   private refreshCurrentQuestion(): void {
     const state = this.state();
 
-    if (state?.status === 'AwaitingTargetPlayer') {
+    if (state?.status === 'AwaitingParticipants') {
       this.currentQuestion.set(null);
       this.sessionService.getPendingRoundPreview(this.sessionId).subscribe({
         next: (preview) => this.pendingRoundPreview.set(preview),
@@ -258,6 +328,106 @@ export class HostLiveComponent implements OnInit, OnDestroy {
       this.adjustingPlayerId.set(null);
       this.refreshState();
     });
+  }
+
+  protected startAdjustTeamScore(teamId: number): void {
+    this.adjustingTeamId.set(teamId);
+    this.teamAdjustDelta.set(0);
+    this.teamAdjustReason.set('');
+  }
+
+  protected cancelAdjustTeamScore(): void {
+    this.adjustingTeamId.set(null);
+  }
+
+  protected confirmAdjustTeamScore(): void {
+    const teamId = this.adjustingTeamId();
+    const delta = this.teamAdjustDelta();
+    if (teamId === null || delta === 0) {
+      return;
+    }
+
+    this.sessionService.adjustTeamScore(this.sessionId, teamId, delta, this.teamAdjustReason() || 'Ajustement manuel').subscribe(() => {
+      this.adjustingTeamId.set(null);
+      this.refreshState();
+    });
+  }
+
+  protected openTeamBuilder(): void {
+    const existing = this.state()?.teams ?? [];
+    this.teamDrafts.set(
+      existing.length > 0
+        ? existing.map((t) => ({ name: t.name, playerIds: new Set(t.playerIds) }))
+        : [{ name: '', playerIds: new Set() }]
+    );
+    this.teamBuilderOpen.set(true);
+  }
+
+  protected cancelTeamBuilder(): void {
+    this.teamBuilderOpen.set(false);
+  }
+
+  protected addTeamDraft(): void {
+    this.teamDrafts.update((drafts) => [...drafts, { name: '', playerIds: new Set() }]);
+  }
+
+  protected removeTeamDraft(index: number): void {
+    this.teamDrafts.update((drafts) => drafts.filter((_, i) => i !== index));
+  }
+
+  protected renameTeamDraft(index: number, name: string): void {
+    this.teamDrafts.update((drafts) => drafts.map((d, i) => (i === index ? { ...d, name } : d)));
+  }
+
+  protected toggleDraftPlayer(index: number, playerId: number): void {
+    this.teamDrafts.update((drafts) =>
+      drafts.map((d, i) => {
+        if (i !== index) {
+          return d;
+        }
+        const playerIds = new Set(d.playerIds);
+        playerIds.has(playerId) ? playerIds.delete(playerId) : playerIds.add(playerId);
+        return { ...d, playerIds };
+      })
+    );
+  }
+
+  protected isPlayerTakenByOtherDraft(index: number, playerId: number): boolean {
+    return this.teamDrafts().some((d, i) => i !== index && d.playerIds.has(playerId));
+  }
+
+  protected saveTeams(): void {
+    const teams = this.teamDrafts()
+      .filter((d) => d.name.trim().length > 0)
+      .map((d) => ({ name: d.name.trim(), playerIds: [...d.playerIds] }));
+
+    this.sessionService.setTeams(this.sessionId, teams).subscribe((state) => {
+      this.applyState(state);
+      this.teamBuilderOpen.set(false);
+    });
+  }
+
+  protected toggleThemeSelector(subRoundId: number): void {
+    this.themeSelectorOpenId.update((current) => (current === subRoundId ? null : subRoundId));
+  }
+
+  protected onChooseTheme(subRoundId: number, selection: ParticipantSelection): void {
+    this.sessionService.chooseTheme(this.sessionId, subRoundId, selection.playerIds, selection.teamIds).subscribe((state) => {
+      this.themeSelectorOpenId.set(null);
+      this.applyState(state);
+    });
+  }
+
+  protected skipTheme(subRoundId: number): void {
+    this.sessionService.skipTheme(this.sessionId, subRoundId).subscribe((state) => this.applyState(state));
+  }
+
+  protected revealAllThemes(): void {
+    this.sessionService.revealThemes(this.sessionId).subscribe((state) => this.applyState(state));
+  }
+
+  protected revealTheme(subRoundId: number): void {
+    this.sessionService.revealThemes(this.sessionId, subRoundId).subscribe((state) => this.applyState(state));
   }
 
   private refreshAnswerFeed(): void {

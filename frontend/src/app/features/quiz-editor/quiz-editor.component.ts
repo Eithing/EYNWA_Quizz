@@ -73,8 +73,25 @@ export class QuizEditorComponent implements OnInit {
       featureTypeKey: feature.typeKey,
       title: `Nouvelle manche — ${feature.displayName}`,
       configJson: '{}',
-      requiresTargetPlayer: false,
-      questions: []
+      restrictsParticipants: false,
+      isThemePicker: false,
+      questions: [],
+      subRounds: []
+    });
+    this.rounds.update((rounds) => [...rounds, draft]);
+    this.selectedClientId.set(draft.clientId);
+  }
+
+  protected addThemePickerRound(): void {
+    const draft = toRoundDraft({
+      order: this.rounds().length,
+      featureTypeKey: '',
+      title: 'Nouvelle manche à thèmes',
+      configJson: '{}',
+      restrictsParticipants: false,
+      isThemePicker: true,
+      questions: [],
+      subRounds: []
     });
     this.rounds.update((rounds) => [...rounds, draft]);
     this.selectedClientId.set(draft.clientId);

@@ -1,0 +1,39 @@
+<div class="participant-selector">
+  @if (hasTeams()) {
+    <div class="participant-selector__tabs">
+      <button type="button" class="btn" [class.btn-primary]="mode() === 'players'" (click)="setMode('players')">Joueurs</button>
+      <button type="button" class="btn" [class.btn-primary]="mode() === 'teams'" (click)="setMode('teams')">Équipes</button>
+    </div>
+  }
+
+  @if (mode() === 'players') {
+    <ul class="participant-selector__list">
+      @for (player of players(); track player.id) {
+        <li>
+          <label>
+            <input type="checkbox" [checked]="selectedPlayerIds().has(player.id)" (change)="togglePlayer(player.id)" />
+            {{ player.pseudo }}
+          </label>
+        </li>
+      } @empty {
+        <p class="participant-selector__hint">Personne n'a encore rejoint.</p>
+      }
+    </ul>
+  } @else {
+    <ul class="participant-selector__list">
+      @for (team of teams(); track team.id) {
+        <li>
+          <label>
+            <input type="checkbox" [checked]="selectedTeamIds().has(team.id)" (change)="toggleTeam(team.id)" />
+            {{ team.name }}
+          </label>
+        </li>
+      }
+    </ul>
+  }
+
+  <div class="participant-selector__actions">
+    <button type="button" class="btn btn-secondary" (click)="selectEveryone()">Tout le monde</button>
+    <button type="button" class="btn btn-primary" [disabled]="!hasSelection()" (click)="submit()">{{ confirmLabel() }}</button>
+  </div>
+</div>

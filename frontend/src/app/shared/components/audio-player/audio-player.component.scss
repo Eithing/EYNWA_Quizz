@@ -1,16 +1,28 @@
 .audio-player {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   padding: 20px 0;
 }
 
+.audio-player__timeline {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.audio-player__controls {
+  display: flex;
+  gap: 10px;
+}
+
 .audio-player__btn {
-  padding: 16px 32px;
+  padding: 14px 26px;
   border-radius: var(--radius-md);
   border: none;
   background: var(--accent);
   color: white;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.1s ease-out, opacity 0.2s;
@@ -20,7 +32,13 @@
   }
 
   &:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: default;
   }
+}
+
+.audio-player__btn--secondary {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
 }

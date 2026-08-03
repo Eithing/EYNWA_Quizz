@@ -1,9 +1,38 @@
-export type GameSessionStatus = 'Lobby' | 'Running' | 'Paused' | 'RoundIntermission' | 'AwaitingTargetPlayer' | 'Finished';
+export type GameSessionStatus =
+  | 'Lobby'
+  | 'Running'
+  | 'Paused'
+  | 'RoundIntermission'
+  | 'AwaitingParticipants'
+  | 'ChoosingTheme'
+  | 'Finished';
 
 export interface Player {
   id: number;
   pseudo: string;
+  /** Score perso uniquement. */
   score: number;
+  teamId: number | null;
+  /** Pot de l'équipe du joueur (0 si aucune équipe). */
+  teamScore: number;
+  /** score + teamScore — c'est celui-là qu'il faut afficher comme score "officiel" du joueur. */
+  totalScore: number;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  playerIds: number[];
+  score: number;
+}
+
+export type ThemeResolution = 'Pending' | 'Played' | 'Skipped';
+
+export interface ThemeBoardEntry {
+  subRoundId: number;
+  title: string;
+  isRevealed: boolean;
+  resolution: ThemeResolution;
 }
 
 export interface GameSessionState {
@@ -15,11 +44,15 @@ export interface GameSessionState {
   currentQuestionIndex: number;
   roundCount: number;
   scoreboardVisible: boolean;
-  currentRoundTargetPlayerId: number | null;
-  currentRoundTargetPlayerPseudo: string | null;
+  currentRoundParticipantPlayerIds: number[];
+  currentRoundParticipantTeamIds: number[];
+  teamScoringEnabled: boolean;
   currentBuzzHolderPlayerId: number | null;
   currentBuzzHolderPseudo: string | null;
   players: Player[];
+  teams: Team[];
+  /** Non-null seulement quand la manche courante est une manche à thèmes. */
+  themeBoard: ThemeBoardEntry[] | null;
 }
 
 export interface CurrentQuestionAdmin {
@@ -36,6 +69,8 @@ export interface CurrentQuestionAdmin {
   isAnswerWindowOpen: boolean;
   isBuzzerMode: boolean;
   correctFinders: string[];
+  secondsElapsedTotal: number;
+  isPaused: boolean;
 }
 
 export interface AnswerFeedItem {
@@ -76,6 +111,8 @@ export interface PlayerQuestion {
   correctFinders: string[];
   isSpectator: boolean;
   isBuzzerMode: boolean;
+  secondsElapsedTotal: number;
+  isPaused: boolean;
 }
 
 export interface RoundPreview {
@@ -97,4 +134,8 @@ export interface QaPublicPayload {
 
 export interface BlindTestPublicPayload {
   audioUrl: string;
+}
+
+export interface ImageGuessPublicPayload {
+  imageUrl: string;
 }

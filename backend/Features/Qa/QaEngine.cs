@@ -89,7 +89,7 @@ public class QaEngine : IFeatureEngine
         var currentPoints = config.RankBasedScoring ? config.RankMaxPoints : config.Points;
 
         // Pas de palier : le temps restant "global" est le même que le temps restant du seul palier.
-        return new FeatureRuntimeState(1, currentPoints, secondsRemaining, secondsRemaining, isAnswerWindowOpen, shouldAutoAdvance);
+        return new FeatureRuntimeState(1, currentPoints, secondsRemaining, secondsRemaining, isAnswerWindowOpen, shouldAutoAdvance, elapsedSeconds);
     }
 
     protected static QaRoundConfig ParseConfig(string configJson) =>

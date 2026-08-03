@@ -1,13 +1,28 @@
 <div class="audio-player">
-  <audio #audioEl [src]="audioUrl()" (play)="onPlay()" (ended)="onEnded()" (pause)="onEnded()"></audio>
+  <audio
+    #audioEl
+    [src]="audioUrl()"
+    (play)="onPlay()"
+    (pause)="onPause()"
+    (ended)="onPause()"
+    (timeupdate)="onTimeUpdate()"
+  ></audio>
 
-  <button type="button" class="audio-player__btn" [disabled]="playing()" (click)="play()">
-    @if (playing()) {
-      🔊 Lecture en cours…
-    } @else if (hasPlayedOnce()) {
-      🔁 Réécouter
-    } @else {
-      ▶ Écouter
-    }
-  </button>
+  @if (showTimeline()) {
+    <input
+      class="audio-player__timeline"
+      type="range"
+      min="0"
+      [max]="duration() || 0"
+      step="0.1"
+      [value]="currentTime()"
+      (input)="seek($any($event.target).value)"
+    />
+  }
+
+  <div class="audio-player__controls">
+    <button type="button" class="audio-player__btn" [disabled]="playing() || syncPaused()" (click)="play()">▶ Lecture</button>
+    <button type="button" class="audio-player__btn audio-player__btn--secondary" [disabled]="!playing()" (click)="pause()">⏸ Pause</button>
+    <button type="button" class="audio-player__btn audio-player__btn--secondary" (click)="stop()">⏹ Stop</button>
+  </div>
 </div>

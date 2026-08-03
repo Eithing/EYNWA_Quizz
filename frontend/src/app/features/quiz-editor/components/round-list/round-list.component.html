@@ -10,7 +10,7 @@
       <span class="round-list__index">{{ i + 1 }}</span>
       <div class="round-list__info">
         <span class="round-list__title">{{ round.title }}</span>
-        <app-ui-badge>{{ round.featureTypeKey }}</app-ui-badge>
+        <app-ui-badge>{{ round.isThemePicker ? 'thèmes' : round.featureTypeKey }}</app-ui-badge>
       </div>
       <div class="round-list__actions">
         <button type="button" title="Monter" [disabled]="i === 0" (click)="moveUp.emit(round.clientId); $event.stopPropagation()">↑</button>

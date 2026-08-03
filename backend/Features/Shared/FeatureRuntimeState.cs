@@ -10,6 +10,9 @@ public record FeatureRuntimeState(
     int SecondsRemainingInStep,
     int SecondsRemainingTotal,
     bool IsAnswerWindowOpen,
-    bool ShouldAutoAdvance);
+    bool ShouldAutoAdvance,
+    /// <summary>Temps écoulé brut depuis le début de la question (gelé pendant une pause) — sert de position
+    /// de lecture autoritaire pour synchroniser l'audio (blind-test) entre tous les clients.</summary>
+    double SecondsElapsedTotal = 0);
 
 public record FeatureAnswerEvaluation(bool? IsCorrect, int PointsAwarded);

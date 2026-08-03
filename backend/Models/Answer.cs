@@ -32,6 +32,13 @@ public class Answer
     public int PendingPoints { get; set; }
 
     public int PointsAwarded { get; set; }
+
+    /// <summary>Non-null si le mode équipe était actif au moment de la réponse : PointsAwarded va dans le
+    /// pot de cette équipe plutôt que dans le score perso du joueur (snapshotté ici pour rester correct
+    /// même si le mode équipe est désactivé/réactivé plus tard dans la partie).</summary>
+    public int? TeamId { get; set; }
+    public Team? Team { get; set; }
+
     public AnswerValidationMode ValidationMode { get; set; }
     public DateTime? ValidatedByGmAt { get; set; }
     public DateTime SubmittedAt { get; set; }

@@ -7,6 +7,7 @@ import { SessionService } from '../../core/services/session.service';
 import {
   BlindTestPublicPayload,
   GameSessionState,
+  ImageGuessPublicPayload,
   JoinSessionResponse,
   PlayerQuestion,
   QaPublicPayload,
@@ -39,10 +40,26 @@ export class PlayComponent implements OnInit, OnDestroy {
   protected readonly buzzing = signal(false);
 
   protected readonly myScore = computed(
-    () => this.state()?.players.find((p) => p.id === this.playerInfo?.playerId)?.score ?? 0
+    () => this.state()?.players.find((p) => p.id === this.playerInfo?.playerId)?.totalScore ?? 0
   );
 
   protected readonly hasBuzzer = computed(() => this.state()?.currentBuzzHolderPlayerId === this.playerInfo?.playerId);
+
+  protected readonly participantNames = computed(() => {
+    const s = this.state();
+    if (!s) {
+      return null;
+    }
+    if (s.currentRoundParticipantTeamIds.length > 0) {
+      const names = s.teams.filter((t) => s.currentRoundParticipantTeamIds.includes(t.id)).map((t) => t.name);
+      return names.length > 0 ? names.join(', ') : null;
+    }
+    if (s.currentRoundParticipantPlayerIds.length > 0) {
+      const names = s.players.filter((p) => s.currentRoundParticipantPlayerIds.includes(p.id)).map((p) => p.pseudo);
+      return names.length > 0 ? names.join(', ') : null;
+    }
+    return null;
+  });
 
   protected readonly zoomPayload = computed<ZoomPublicPayload | null>(() => {
     const question = this.question();
@@ -59,6 +76,11 @@ export class PlayComponent implements OnInit, OnDestroy {
     return question?.featureTypeKey === 'blind-test' ? JSON.parse(question.publicPayloadJson) : null;
   });
 
+  protected readonly imageGuessPayload = computed<ImageGuessPublicPayload | null>(() => {
+    const question = this.question();
+    return question?.featureTypeKey === 'image-guess' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
   protected readonly resolvedImageUrl = computed(() => {
     const payload = this.zoomPayload();
     return payload ? this.mediaService.resolveUrl(payload.imageUrl) : '';
@@ -67,6 +89,11 @@ export class PlayComponent implements OnInit, OnDestroy {
   protected readonly resolvedAudioUrl = computed(() => {
     const payload = this.blindTestPayload();
     return payload ? this.mediaService.resolveUrl(payload.audioUrl) : '';
+  });
+
+  protected readonly resolvedImageGuessUrl = computed(() => {
+    const payload = this.imageGuessPayload();
+    return payload ? this.mediaService.resolveUrl(payload.imageUrl) : '';
   });
 
   constructor(

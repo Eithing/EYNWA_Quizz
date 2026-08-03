@@ -1,7 +1,10 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { QuestionDraft, RoundDraft, toQuestionDraft } from '../../models/round-draft.model';
+import { FeatureMeta } from '../../../../models/feature.model';
+import { QuestionDraft, RoundDraft, toQuestionDraft, toRoundDraft } from '../../models/round-draft.model';
 import { BlindTestQuestionEditorComponent } from '../blind-test-question-editor/blind-test-question-editor.component';
+import { FeaturePickerComponent } from '../feature-picker/feature-picker.component';
+import { ImageGuessQuestionEditorComponent } from '../image-guess-question-editor/image-guess-question-editor.component';
 import { QaQuestionEditorComponent } from '../qa-question-editor/qa-question-editor.component';
 import { QaRoundConfigComponent } from '../qa-round-config/qa-round-config.component';
 import { ZoomQuestionEditorComponent } from '../zoom-question-editor/zoom-question-editor.component';
@@ -15,7 +18,10 @@ import { ZoomRoundConfigComponent } from '../zoom-round-config/zoom-round-config
     ZoomQuestionEditorComponent,
     QaRoundConfigComponent,
     QaQuestionEditorComponent,
-    BlindTestQuestionEditorComponent
+    BlindTestQuestionEditorComponent,
+    ImageGuessQuestionEditorComponent,
+    FeaturePickerComponent,
+    RoundEditorComponent
   ],
   templateUrl: './round-editor.component.html',
   styleUrl: './round-editor.component.scss'
@@ -23,19 +29,30 @@ import { ZoomRoundConfigComponent } from '../zoom-round-config/zoom-round-config
 export class RoundEditorComponent {
   readonly round = input.required<RoundDraft>();
   readonly roundChange = output<RoundDraft>();
+  /** Vrai quand ce composant édite un thème (sous-manche) plutôt qu'une manche de premier niveau — masque
+   * les options qui n'ont pas de sens à ce niveau (restriction de participants, manche à thèmes imbriquée). */
+  readonly isNested = input(false);
 
   protected readonly isZoomImage = computed(() => this.round().featureTypeKey === 'zoom-image');
   protected readonly isQaText = computed(() => this.round().featureTypeKey === 'qa-text');
   protected readonly isBlindTest = computed(() => this.round().featureTypeKey === 'blind-test');
-  // qa-text et blind-test partagent exactement la même configuration de manche.
-  protected readonly usesQaRoundConfig = computed(() => this.isQaText() || this.isBlindTest());
+  protected readonly isImageGuess = computed(() => this.round().featureTypeKey === 'image-guess');
+  // qa-text, blind-test et image-guess partagent exactement la même configuration de manche.
+  protected readonly usesQaRoundConfig = computed(() => this.isQaText() || this.isBlindTest() || this.isImageGuess());
+
+  protected readonly addingTheme = signal(false);
+  protected readonly selectedSubRoundClientId = signal<number | null>(null);
+
+  protected readonly selectedSubRound = computed(
+    () => this.round().subRounds.find((r) => r.clientId === this.selectedSubRoundClientId()) ?? null
+  );
 
   protected onTitleChange(title: string): void {
     this.roundChange.emit({ ...this.round(), title });
   }
 
-  protected onRequiresTargetPlayerChange(requiresTargetPlayer: boolean): void {
-    this.roundChange.emit({ ...this.round(), requiresTargetPlayer });
+  protected onRestrictsParticipantsChange(restrictsParticipants: boolean): void {
+    this.roundChange.emit({ ...this.round(), restrictsParticipants });
   }
 
   protected onConfigJsonChange(configJson: string): void {
@@ -79,5 +96,57 @@ export class RoundEditorComponent {
 
   protected trackQuestion(_: number, question: QuestionDraft): number {
     return question.clientId;
+  }
+
+  // --- Sous-manches (manche à thèmes) ---
+
+  protected selectSubRound(clientId: number): void {
+    this.selectedSubRoundClientId.set(clientId);
+    this.addingTheme.set(false);
+  }
+
+  protected startAddTheme(): void {
+    this.addingTheme.set(true);
+    this.selectedSubRoundClientId.set(null);
+  }
+
+  protected cancelAddTheme(): void {
+    this.addingTheme.set(false);
+  }
+
+  protected onThemeFeatureSelected(feature: FeatureMeta): void {
+    const draft = toRoundDraft({
+      order: this.round().subRounds.length,
+      featureTypeKey: feature.typeKey,
+      title: `Thème — ${feature.displayName}`,
+      configJson: '{}',
+      restrictsParticipants: false,
+      isThemePicker: false,
+      questions: [],
+      subRounds: []
+    });
+
+    this.roundChange.emit({ ...this.round(), subRounds: [...this.round().subRounds, draft] });
+    this.addingTheme.set(false);
+    this.selectedSubRoundClientId.set(draft.clientId);
+  }
+
+  protected removeSubRound(clientId: number): void {
+    const subRounds = this.round()
+      .subRounds.filter((r) => r.clientId !== clientId)
+      .map((r, i) => ({ ...r, order: i }));
+    this.roundChange.emit({ ...this.round(), subRounds });
+    if (this.selectedSubRoundClientId() === clientId) {
+      this.selectedSubRoundClientId.set(null);
+    }
+  }
+
+  protected onSubRoundChange(updated: RoundDraft): void {
+    const subRounds = this.round().subRounds.map((r) => (r.clientId === updated.clientId ? updated : r));
+    this.roundChange.emit({ ...this.round(), subRounds });
+  }
+
+  protected trackSubRound(_: number, round: RoundDraft): number {
+    return round.clientId;
   }
 }

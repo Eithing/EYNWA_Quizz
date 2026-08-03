@@ -258,6 +258,151 @@
   }
 }
 
+.host-live__teams-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+
+  h3 {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+}
+
+.host-live__teams {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  li {
+    padding: 8px 12px;
+    background: var(--bg-app);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+  }
+
+  strong {
+    color: var(--success);
+  }
+}
+
+.host-live__player-team {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+
+.host-live__player-breakdown {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.host-live__team-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.host-live__team-draft {
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  > input {
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+  }
+}
+
+.host-live__team-draft-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 0.8rem;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+.host-live__team-draft-player--disabled {
+  opacity: 0.4;
+}
+
+.host-live__team-builder-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.host-live__theme-board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.host-live__theme {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+}
+
+.host-live__theme--done {
+  opacity: 0.6;
+}
+
+.host-live__theme-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.host-live__theme-title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-live__theme-visibility {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.host-live__theme-visibility--visible {
+  color: var(--success);
+}
+
+.host-live__theme-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.host-live__theme-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .host-live__score-adjust {
   display: flex;
   flex-wrap: wrap;

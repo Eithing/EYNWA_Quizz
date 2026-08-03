@@ -7,8 +7,10 @@ public enum GameSessionStatus
     Paused,
     /// <summary>Dernière question d'une manche terminée : en attente que le GM lance la manche suivante.</summary>
     RoundIntermission,
-    /// <summary>La manche à venir est ciblée (Round.RequiresTargetPlayer) : en attente que le GM désigne le joueur concerné avant que le minuteur démarre.</summary>
-    AwaitingTargetPlayer,
+    /// <summary>La manche à venir est restreinte (Round.RestrictsParticipants) : en attente que le GM désigne les joueurs/équipes concernés avant que le minuteur démarre.</summary>
+    AwaitingParticipants,
+    /// <summary>Manche à thèmes en cours : les joueurs voient le plateau de thèmes, en attente que le GM en désigne un (ou skip).</summary>
+    ChoosingTheme,
     Finished
 }
 
@@ -40,11 +42,18 @@ public class GameSession
     /// <summary>Contrôlé explicitement par le GM : affiche le classement courant côté joueurs (en cours de partie ou en fin de partie).</summary>
     public bool ScoreboardVisible { get; set; }
 
-    /// <summary>Joueur désigné par le GM pour la manche courante quand Round.RequiresTargetPlayer est vrai ; remis à null à chaque nouvelle manche.</summary>
-    public int? CurrentRoundTargetPlayerId { get; set; }
-
     /// <summary>Joueur qui a buzzé le premier sur la question courante (mode buzzer de qa-text) ; remis à null à chaque nouvelle question et à chaque résolution du buzz par le GM.</summary>
     public int? CurrentBuzzHolderPlayerId { get; set; }
 
+    /// <summary>Coché par le GM pour la manche/sous-manche courante : les points gagnés vont dans le pot
+    /// d'équipe du joueur plutôt que dans son score perso. Remis à false à chaque nouvelle manche (activé
+    /// automatiquement si le GM désigne une/des équipe(s) comme participants).</summary>
+    public bool TeamScoringEnabled { get; set; }
+
+    /// <summary>Manche à thèmes en cours : sous-manche actuellement active (Round.Id d'un enfant de la
+    /// manche courante), null tant qu'aucun thème n'a été choisi ou qu'on n'est pas dans une manche à thèmes.</summary>
+    public int? CurrentThemeSubRoundId { get; set; }
+
     public List<Player> Players { get; set; } = [];
+    public List<Team> Teams { get; set; } = [];
 }

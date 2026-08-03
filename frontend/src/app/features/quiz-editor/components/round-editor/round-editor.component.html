@@ -1,73 +1,113 @@
 <div class="round-editor">
   <div class="form-field">
-    <label for="round-title">Titre de la manche</label>
+    <label for="round-title">{{ isNested() ? 'Titre du thème' : 'Titre de la manche' }}</label>
     <input id="round-title" type="text" [value]="round().title" (input)="onTitleChange($any($event.target).value)" />
   </div>
 
-  <label class="round-editor__checkbox">
-    <input
-      type="checkbox"
-      [checked]="round().requiresTargetPlayer"
-      (change)="onRequiresTargetPlayerChange($any($event.target).checked)"
-    />
-    Manche ciblée sur un seul joueur (le GM le désignera en direct pendant la partie — les autres seront spectateurs)
-  </label>
-
-  @if (isZoomImage()) {
-    <app-zoom-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
-  } @else if (usesQaRoundConfig()) {
-    <app-qa-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
-  } @else {
-    <div class="form-field">
-      <label for="round-config">
-        Configuration (JSON) — pas encore d'éditeur visuel dédié pour {{ round().featureTypeKey }}
-      </label>
-      <textarea id="round-config" rows="8" [value]="round().configJson" (input)="onConfigJsonChange($any($event.target).value)"></textarea>
-    </div>
+  @if (!isNested()) {
+    <label class="round-editor__checkbox">
+      <input
+        type="checkbox"
+        [checked]="round().restrictsParticipants"
+        (change)="onRestrictsParticipantsChange($any($event.target).checked)"
+      />
+      Manche à participants restreints (le GM désignera en direct qui joue — les autres seront spectateurs)
+    </label>
   }
 
-  <div class="round-editor__questions">
-    <div class="round-editor__questions-header">
-      <label>Questions ({{ round().questions.length }})</label>
-      <button type="button" class="btn btn-secondary" (click)="addQuestion()">+ Ajouter une question</button>
-    </div>
-
-    @for (question of round().questions; track trackQuestion($index, question); let i = $index) {
-      <div class="question-editor">
-        <div class="question-editor__header">
-          <span>Question {{ i + 1 }}</span>
-          <div class="question-editor__actions">
-            <button type="button" [disabled]="i === 0" (click)="moveQuestion(question.clientId, -1)">↑</button>
-            <button type="button" [disabled]="i === round().questions.length - 1" (click)="moveQuestion(question.clientId, 1)">↓</button>
-            <button type="button" class="question-editor__remove" (click)="removeQuestion(question.clientId)">✕</button>
-          </div>
-        </div>
-
-        @if (isZoomImage()) {
-          <app-zoom-question-editor
-            [payloadJson]="question.payloadJson"
-            (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
-          />
-        } @else if (isQaText()) {
-          <app-qa-question-editor
-            [payloadJson]="question.payloadJson"
-            (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
-          />
-        } @else if (isBlindTest()) {
-          <app-blind-test-question-editor
-            [payloadJson]="question.payloadJson"
-            (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
-          />
-        } @else {
-          <textarea
-            rows="4"
-            [value]="question.payloadJson"
-            (input)="onQuestionPayloadChange(question.clientId, $any($event.target).value)"
-          ></textarea>
-        }
+  @if (round().isThemePicker) {
+    <div class="round-editor__themes">
+      <div class="round-editor__questions-header">
+        <label>Thèmes ({{ round().subRounds.length }})</label>
+        <button type="button" class="btn btn-secondary" (click)="startAddTheme()">+ Ajouter un thème</button>
       </div>
-    } @empty {
-      <p class="round-editor__hint">Aucune question pour l'instant.</p>
+
+      <ul class="round-editor__theme-list">
+        @for (sub of round().subRounds; track trackSubRound($index, sub)) {
+          <li [class.round-editor__theme-tile--selected]="selectedSubRoundClientId() === sub.clientId">
+            <button type="button" class="round-editor__theme-tile" (click)="selectSubRound(sub.clientId)">
+              {{ sub.title || 'Thème sans titre' }} <span class="round-editor__theme-badge">{{ sub.featureTypeKey }}</span>
+            </button>
+            <button type="button" class="question-editor__remove" title="Supprimer ce thème" (click)="removeSubRound(sub.clientId)">✕</button>
+          </li>
+        } @empty {
+          <p class="round-editor__hint">Aucun thème pour l'instant.</p>
+        }
+      </ul>
+
+      @if (addingTheme()) {
+        <app-feature-picker (featureSelected)="onThemeFeatureSelected($event)" />
+        <button type="button" class="btn btn-secondary" (click)="cancelAddTheme()">Annuler</button>
+      }
+
+      @if (selectedSubRound(); as sub) {
+        <div class="round-editor__theme-editor">
+          <app-round-editor [round]="sub" [isNested]="true" (roundChange)="onSubRoundChange($event)" />
+        </div>
+      }
+    </div>
+  } @else {
+    @if (isZoomImage()) {
+      <app-zoom-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
+    } @else if (usesQaRoundConfig()) {
+      <app-qa-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
+    } @else {
+      <div class="form-field">
+        <label for="round-config">
+          Configuration (JSON) — pas encore d'éditeur visuel dédié pour {{ round().featureTypeKey }}
+        </label>
+        <textarea id="round-config" rows="8" [value]="round().configJson" (input)="onConfigJsonChange($any($event.target).value)"></textarea>
+      </div>
     }
-  </div>
+
+    <div class="round-editor__questions">
+      <div class="round-editor__questions-header">
+        <label>Questions ({{ round().questions.length }})</label>
+        <button type="button" class="btn btn-secondary" (click)="addQuestion()">+ Ajouter une question</button>
+      </div>
+
+      @for (question of round().questions; track trackQuestion($index, question); let i = $index) {
+        <div class="question-editor">
+          <div class="question-editor__header">
+            <span>Question {{ i + 1 }}</span>
+            <div class="question-editor__actions">
+              <button type="button" [disabled]="i === 0" (click)="moveQuestion(question.clientId, -1)">↑</button>
+              <button type="button" [disabled]="i === round().questions.length - 1" (click)="moveQuestion(question.clientId, 1)">↓</button>
+              <button type="button" class="question-editor__remove" (click)="removeQuestion(question.clientId)">✕</button>
+            </div>
+          </div>
+
+          @if (isZoomImage()) {
+            <app-zoom-question-editor
+              [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else if (isQaText()) {
+            <app-qa-question-editor
+              [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else if (isBlindTest()) {
+            <app-blind-test-question-editor
+              [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else if (isImageGuess()) {
+            <app-image-guess-question-editor
+              [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else {
+            <textarea
+              rows="4"
+              [value]="question.payloadJson"
+              (input)="onQuestionPayloadChange(question.clientId, $any($event.target).value)"
+            ></textarea>
+          }
+        </div>
+      } @empty {
+        <p class="round-editor__hint">Aucune question pour l'instant.</p>
+      }
+    </div>
+  }
 </div>

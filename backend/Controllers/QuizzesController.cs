@@ -23,7 +23,7 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
             .AsNoTracking()
             .Where(q => q.OwnerId == ownerId)
             .OrderByDescending(q => q.UpdatedAt)
-            .Select(q => new QuizSummaryDto(q.Id, q.Title, q.Description, q.UpdatedAt, q.Rounds.Count))
+            .Select(q => new QuizSummaryDto(q.Id, q.Title, q.Description, q.UpdatedAt, q.Rounds.Count(r => r.ParentRoundId == null)))
             .ToListAsync();
 
         return Ok(quizzes);
@@ -60,7 +60,7 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
             Description = request.Description,
             CreatedAt = now,
             UpdatedAt = now,
-            Rounds = request.Rounds.Select(ToRoundEntity).ToList()
+            Rounds = request.Rounds.Select(ToRoundEntity).SelectMany(Flatten).ToList()
         };
 
         db.Quizzes.Add(quiz);
@@ -89,7 +89,7 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
         quiz.UpdatedAt = DateTime.UtcNow;
 
         db.Rounds.RemoveRange(quiz.Rounds);
-        quiz.Rounds = request.Rounds.Select(ToRoundEntity).ToList();
+        quiz.Rounds = request.Rounds.Select(ToRoundEntity).SelectMany(Flatten).ToList();
 
         await db.SaveChangesAsync();
 
@@ -131,19 +131,10 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
             CreatedAt = now,
             UpdatedAt = now,
             Rounds = source.Rounds
+                .Where(r => r.ParentRoundId == null)
                 .OrderBy(r => r.Order)
-                .Select(r => new Round
-                {
-                    Order = r.Order,
-                    FeatureTypeKey = r.FeatureTypeKey,
-                    Title = r.Title,
-                    ConfigJson = r.ConfigJson,
-                    RequiresTargetPlayer = r.RequiresTargetPlayer,
-                    Questions = r.Questions
-                        .OrderBy(q => q.Order)
-                        .Select(q => new Question { Order = q.Order, PayloadJson = q.PayloadJson })
-                        .ToList()
-                })
+                .Select(CopyRound)
+                .SelectMany(Flatten)
                 .ToList()
         };
 
@@ -159,6 +150,7 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
 
         return await db.Quizzes
             .Include(q => q.Rounds).ThenInclude(r => r.Questions)
+            .Include(q => q.Rounds).ThenInclude(r => r.SubRounds).ThenInclude(sr => sr.Questions)
             .SingleOrDefaultAsync(q => q.Id == id && q.OwnerId == ownerId);
     }
 
@@ -169,24 +161,98 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
             return "Le titre du quiz est requis.";
         }
 
-        var unknownFeature = request.Rounds.FirstOrDefault(r => !featureRegistry.Exists(r.FeatureTypeKey));
+        // Une manche à thèmes ne porte pas de FeatureTypeKey elle-même (ignoré) : seules ses sous-manches
+        // (les thèmes) doivent référencer une feature connue.
+        var playableRounds = request.Rounds
+            .Where(r => !r.IsThemePicker)
+            .Concat(request.Rounds.Where(r => r.IsThemePicker).SelectMany(r => r.SubRounds ?? []));
+
+        var unknownFeature = playableRounds.FirstOrDefault(r => !featureRegistry.Exists(r.FeatureTypeKey));
         if (unknownFeature is not null)
         {
             return $"Type de manche inconnu : {unknownFeature.FeatureTypeKey}.";
         }
 
+        var emptyThemePicker = request.Rounds.FirstOrDefault(r => r.IsThemePicker && (r.SubRounds is null || r.SubRounds.Count == 0));
+        if (emptyThemePicker is not null)
+        {
+            return $"La manche à thèmes « {emptyThemePicker.Title} » doit avoir au moins un thème.";
+        }
+
         return null;
     }
 
-    private static Round ToRoundEntity(RoundDto dto) => new()
+    private static Round ToRoundEntity(RoundDto dto)
     {
-        Order = dto.Order,
-        FeatureTypeKey = dto.FeatureTypeKey,
-        Title = dto.Title,
-        ConfigJson = dto.ConfigJson,
-        RequiresTargetPlayer = dto.RequiresTargetPlayer,
-        Questions = dto.Questions.Select(q => new Question { Order = q.Order, PayloadJson = q.PayloadJson }).ToList()
-    };
+        var round = new Round
+        {
+            Order = dto.Order,
+            FeatureTypeKey = dto.FeatureTypeKey,
+            Title = dto.Title,
+            ConfigJson = dto.ConfigJson,
+            RestrictsParticipants = dto.RestrictsParticipants,
+            IsThemePicker = dto.IsThemePicker,
+            Questions = dto.Questions.Select(q => new Question { Order = q.Order, PayloadJson = q.PayloadJson }).ToList()
+        };
+
+        round.SubRounds = (dto.SubRounds ?? []).Select(ToRoundEntity).ToList();
+        foreach (var sub in round.SubRounds)
+        {
+            sub.Parent = round;
+        }
+
+        return round;
+    }
+
+    private static Round CopyRound(Round source)
+    {
+        var copy = new Round
+        {
+            Order = source.Order,
+            FeatureTypeKey = source.FeatureTypeKey,
+            Title = source.Title,
+            ConfigJson = source.ConfigJson,
+            RestrictsParticipants = source.RestrictsParticipants,
+            IsThemePicker = source.IsThemePicker,
+            Questions = source.Questions
+                .OrderBy(q => q.Order)
+                .Select(q => new Question { Order = q.Order, PayloadJson = q.PayloadJson })
+                .ToList()
+        };
+
+        copy.SubRounds = source.SubRounds.OrderBy(sr => sr.Order).Select(CopyRound).ToList();
+        foreach (var sub in copy.SubRounds)
+        {
+            sub.Parent = copy;
+        }
+
+        return copy;
+    }
+
+    /// <summary>Aplatit un arbre manche/sous-manches en une liste plate (Quiz.Rounds contient les deux
+    /// niveaux, ParentRoundId seul porte la hiérarchie) — nécessaire pour l'insertion/le remplacement EF.</summary>
+    private static IEnumerable<Round> Flatten(Round round)
+    {
+        yield return round;
+        foreach (var sub in round.SubRounds)
+        {
+            foreach (var flattened in Flatten(sub))
+            {
+                yield return flattened;
+            }
+        }
+    }
+
+    private static RoundDto ToRoundDto(Round r) => new(
+        r.Id,
+        r.Order,
+        r.FeatureTypeKey,
+        r.Title,
+        r.ConfigJson,
+        r.RestrictsParticipants,
+        r.Questions.OrderBy(q => q.Order).Select(q => new QuestionDto(q.Id, q.Order, q.PayloadJson)).ToList(),
+        r.IsThemePicker,
+        r.IsThemePicker ? r.SubRounds.OrderBy(sr => sr.Order).Select(ToRoundDto).ToList() : null);
 
     private static QuizDetailDto ToDetailDto(Quiz quiz) => new(
         quiz.Id,
@@ -195,14 +261,8 @@ public class QuizzesController(QuizPartyDbContext db, FeatureRegistry featureReg
         quiz.CreatedAt,
         quiz.UpdatedAt,
         quiz.Rounds
+            .Where(r => r.ParentRoundId == null)
             .OrderBy(r => r.Order)
-            .Select(r => new RoundDto(
-                r.Id,
-                r.Order,
-                r.FeatureTypeKey,
-                r.Title,
-                r.ConfigJson,
-                r.RequiresTargetPlayer,
-                r.Questions.OrderBy(q => q.Order).Select(q => new QuestionDto(q.Id, q.Order, q.PayloadJson)).ToList()))
+            .Select(ToRoundDto)
             .ToList());
 }
