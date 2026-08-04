@@ -1,0 +1,23 @@
+<div class="closest-guess-question-editor">
+  <div class="form-field">
+    <label for="cg-question-text">Question</label>
+    <textarea
+      id="cg-question-text"
+      rows="3"
+      placeholder="Ex : Quelle taille fait la tour Eiffel (en mètres) ?"
+      [value]="payload().questionText"
+      (input)="onQuestionTextChange($any($event.target).value)"
+    ></textarea>
+  </div>
+
+  <div class="form-field">
+    <label for="cg-target-value">Valeur exacte</label>
+    <input
+      id="cg-target-value"
+      type="number"
+      step="any"
+      [value]="payload().targetValue"
+      (input)="onTargetValueChange($any($event.target).valueAsNumber)"
+    />
+  </div>
+</div>

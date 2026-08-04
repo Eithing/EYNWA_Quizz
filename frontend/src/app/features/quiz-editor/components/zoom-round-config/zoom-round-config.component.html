@@ -42,6 +42,23 @@
     Autoriser plusieurs tentatives en cas de réponse fausse
   </label>
 
+  @if (config().allowRetry) {
+    <div class="form-field">
+      <label for="zoom-retry-cooldown">Délai avant de pouvoir renvoyer une réponse (s)</label>
+      <input
+        id="zoom-retry-cooldown"
+        type="number"
+        min="0"
+        [value]="config().retryCooldownSeconds"
+        (input)="onRetryCooldownChange($any($event.target).valueAsNumber)"
+      />
+      <p class="zoom-round-config__hint">
+        0 = nouvelle tentative immédiate après une réponse fausse. Sinon, le joueur doit attendre ce délai
+        (ou que tous les autres joueurs aient répondu) avant de pouvoir retenter sa chance.
+      </p>
+    </div>
+  }
+
   <label class="zoom-round-config__checkbox">
     <input type="checkbox" [checked]="config().rankBasedScoring" (change)="onRankBasedScoringChange($any($event.target).checked)" />
     Points dégressifs selon l'ordre d'arrivée (1er = max, puis -X par rang) au lieu des points par palier

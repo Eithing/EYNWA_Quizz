@@ -1,0 +1,17 @@
+<div class="partner-guess-question-editor">
+  <div class="form-field">
+    <label for="pg-question-text">Question</label>
+    <textarea
+      id="pg-question-text"
+      rows="3"
+      placeholder="Ex : Quel est ton film préféré ?"
+      [value]="payload().questionText"
+      (input)="onQuestionTextChange($any($event.target).value)"
+    ></textarea>
+  </div>
+
+  <p class="partner-guess-question-editor__hint">
+    Pas de réponse à pré-écrire ici : c'est le joueur désigné en direct par l'hôte qui fournira la
+    "bonne réponse" en répondant en privé à cette question pendant la partie.
+  </p>
+</div>

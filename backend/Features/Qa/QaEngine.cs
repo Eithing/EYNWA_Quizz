@@ -50,11 +50,12 @@ public class QaEngine : IFeatureEngine
     /// <summary>En mode buzzer, gouverne le droit de re-buzzer après une mauvaise réponse (voir GetRetryCooldownSeconds).</summary>
     public bool AllowsRetryAfterWrongAnswer(string configJson) => ParseConfig(configJson).AllowRetry;
 
-    /// <summary>Mode buzzer uniquement : délai avant de pouvoir re-buzzer après une mauvaise réponse. Sans effet sur la réponse écrite classique.</summary>
+    /// <summary>Délai avant de pouvoir retenter sa chance après une mauvaise réponse — le champ consulté dépend
+    /// du mode (buzzer ou réponse écrite classique), chacun ayant son propre réglage.</summary>
     public int GetRetryCooldownSeconds(string configJson)
     {
         var config = ParseConfig(configJson);
-        return config.BuzzerMode ? config.BuzzerRetryCooldownSeconds : 0;
+        return config.BuzzerMode ? config.BuzzerRetryCooldownSeconds : config.RetryCooldownSeconds;
     }
 
     public bool IsBuzzerMode(string configJson) => ParseConfig(configJson).BuzzerMode;
@@ -76,7 +77,7 @@ public class QaEngine : IFeatureEngine
     public int PointsForRank(string configJson, int correctAnswerRank)
     {
         var config = ParseConfig(configJson);
-        return Math.Max(0, config.RankMaxPoints - config.RankPointsDecrement * correctAnswerRank);
+        return RankScoring.PointsForRank(config.RankMaxPoints, config.RankPointsDecrement, correctAnswerRank);
     }
 
     private static FeatureRuntimeState ComputeStateAtElapsed(QaRoundConfig config, double elapsedSeconds)

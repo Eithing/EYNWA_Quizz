@@ -14,12 +14,17 @@ public class QaRoundConfig
     public bool BuzzerMode { get; set; }
 
     /// <summary>Si vrai, un joueur qui se trompe peut retenter sa chance tant que la fenêtre de réponse est ouverte
-    /// (en mode buzzer : peut re-buzzer, sous réserve de BuzzerRetryCooldownSeconds).</summary>
+    /// (en mode buzzer : peut re-buzzer, sous réserve de BuzzerRetryCooldownSeconds ; à l'écrit, sous réserve de
+    /// RetryCooldownSeconds).</summary>
     public bool AllowRetry { get; set; }
 
     /// <summary>Mode buzzer uniquement : délai en secondes avant qu'un joueur éliminé sur cette question puisse re-buzzer.
-    /// Ignoré si AllowRetry est faux. Sans effet sur la réponse écrite classique.</summary>
+    /// Ignoré si AllowRetry est faux. Sans effet sur la réponse écrite classique (voir RetryCooldownSeconds).</summary>
     public int BuzzerRetryCooldownSeconds { get; set; }
+
+    /// <summary>Réponse écrite classique uniquement : délai en secondes avant qu'un joueur ayant répondu faux
+    /// puisse retenter sa chance. Ignoré si AllowRetry est faux ou en mode buzzer (voir BuzzerRetryCooldownSeconds).</summary>
+    public int RetryCooldownSeconds { get; set; }
 
     /// <summary>Si vrai, les points ne sont plus fixes mais dépendent du rang d'arrivée parmi les bonnes réponses
     /// (1er = RankMaxPoints, puis -RankPointsDecrement par rang suivant, plancher à 0). Sans effet en mode buzzer

@@ -155,10 +155,35 @@
 .play__finders {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
+  gap: 8px;
   margin-top: 14px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px 4px 6px;
+    background: var(--bg-app);
+    border-radius: 999px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+}
+
+.play__finders-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-surface);
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .play__answered {
@@ -178,6 +203,44 @@
 
   &:not(:first-child) {
     margin-top: 18px;
+  }
+}
+
+.play__reveal {
+  margin-top: 12px;
+}
+
+.play__reveal-target {
+  text-align: center;
+  font-size: 1.05rem;
+  margin-bottom: 12px;
+
+  strong {
+    color: var(--accent);
+  }
+}
+
+.play__reveal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    font-size: 0.85rem;
+  }
+}
+
+.play__reveal-winner {
+  box-shadow: inset 3px 0 0 var(--success);
+
+  strong {
+    color: var(--success);
   }
 }
 

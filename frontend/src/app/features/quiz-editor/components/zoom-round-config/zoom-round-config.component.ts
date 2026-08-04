@@ -14,6 +14,7 @@ interface ZoomRoundConfig {
   zoomSteps: ZoomStep[];
   finalLevel: number;
   allowRetry: boolean;
+  retryCooldownSeconds: number;
   rankBasedScoring: boolean;
   rankMaxPoints: number;
   rankPointsDecrement: number;
@@ -27,6 +28,7 @@ function defaultConfig(): ZoomRoundConfig {
     zoomSteps: [],
     finalLevel: 1,
     allowRetry: false,
+    retryCooldownSeconds: 0,
     rankBasedScoring: false,
     rankMaxPoints: 100,
     rankPointsDecrement: 10
@@ -88,6 +90,11 @@ export class ZoomRoundConfigComponent {
 
   protected onAllowRetryChange(value: boolean): void {
     this.config.update((c) => ({ ...c, allowRetry: value }));
+    this.emit();
+  }
+
+  protected onRetryCooldownChange(value: number): void {
+    this.config.update((c) => ({ ...c, retryCooldownSeconds: value }));
     this.emit();
   }
 

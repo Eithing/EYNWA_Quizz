@@ -61,6 +61,10 @@ export class SessionService {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/team-scoring`, { enabled });
   }
 
+  setRoundTeamMode(sessionId: number, enabled: boolean) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/round-team-mode`, { enabled });
+  }
+
   adjustTeamScore(sessionId: number, teamId: number, delta: number, reason: string) {
     return this.http.post<Team>(`${this.baseUrl}/${sessionId}/teams/${teamId}/score-adjustments`, { delta, reason });
   }
@@ -75,6 +79,18 @@ export class SessionService {
 
   revealThemes(sessionId: number, subRoundId?: number) {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/themes/reveal`, { subRoundId: subRoundId ?? null });
+  }
+
+  revealDeferredScoring(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/reveal-deferred-scoring`, {});
+  }
+
+  setPartnerGuessAnswerer(sessionId: number, playerId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/partner-guess/set-answerer`, { playerId });
+  }
+
+  startPartnerGuessGuessing(sessionId: number, playerIds: number[], teamIds: number[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/partner-guess/start-guessing`, { playerIds, teamIds });
   }
 
   resolveBuzz(sessionId: number, isCorrect: boolean) {

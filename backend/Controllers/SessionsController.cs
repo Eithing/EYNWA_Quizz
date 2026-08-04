@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -191,6 +193,35 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         return Ok(await BuildStateDto(session, quiz));
     }
 
+    /// <summary>Ferme le palier d'attente posé au démarrage d'une manche quand des équipes existent : le
+    /// GM tranche le mode équipe avant que le minuteur ne démarre, contrairement à /team-scoring qui bascule
+    /// le mode en cours de manche une fois les joueurs déjà en train de répondre.</summary>
+    [Authorize]
+    [HttpPost("{id:int}/round-team-mode")]
+    public async Task<ActionResult<GameSessionStateDto>> SetRoundTeamMode(int id, SetTeamScoringRequest request)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        if (session.Status != GameSessionStatus.AwaitingTeamMode)
+        {
+            return BadRequest("La session n'attend pas de choix du mode équipe.");
+        }
+
+        session.TeamScoringEnabled = request.Enabled;
+        session.Status = GameSessionStatus.Running;
+        session.CurrentQuestionStartedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
     /// <summary>Le GM choisit un thème du plateau et désigne dans la foulée qui y participe (joueurs ou
     /// équipes) — une seule action, pas de détour par un état d'attente séparé.</summary>
     [Authorize]
@@ -309,6 +340,125 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         return Ok(await BuildStateDto(session, quiz));
     }
 
+    /// <summary>Déclenche manuellement la résolution d'une feature à résolution différée (closest-guess en
+    /// mode Manual) — le GM révèle le classement quand il le souhaite plutôt que d'attendre la fermeture
+    /// automatique de la fenêtre.</summary>
+    [Authorize]
+    [HttpPost("{id:int}/reveal-deferred-scoring")]
+    public async Task<ActionResult<GameSessionStateDto>> RevealDeferredScoring(int id)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
+        if (round is null || question is null)
+        {
+            return BadRequest("Aucune question en cours.");
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        if (!engine.DefersScoringUntilWindowClose(round.ConfigJson))
+        {
+            return BadRequest("Cette manche ne nécessite pas de révélation manuelle.");
+        }
+
+        var pending = await db.Answers.Where(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.IsCorrect == null).ToListAsync();
+        if (pending.Count == 0)
+        {
+            return BadRequest("Aucune estimation en attente.");
+        }
+
+        await ResolveDeferredScoringAsync(session, round, question, engine, pending);
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
+    /// <summary>Désigne le joueur qui répond en privé à la question courante d'une manche "à quoi pense
+    /// l'autre" — démarre le minuteur, personne d'autre ne peut soumettre de réponse tant que le GM n'a
+    /// pas lancé la phase de devinette (voir StartPartnerGuessGuessing).</summary>
+    [Authorize]
+    [HttpPost("{id:int}/partner-guess/set-answerer")]
+    public async Task<ActionResult<GameSessionStateDto>> SetPartnerGuessAnswerer(int id, SetPartnerGuessAnswererRequest request)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        if (session.Status != GameSessionStatus.AwaitingAnswerer)
+        {
+            return BadRequest("La session n'attend pas la désignation d'un répondant.");
+        }
+
+        var player = session.Players.SingleOrDefault(p => p.Id == request.PlayerId);
+        if (player is null)
+        {
+            return BadRequest("Joueur introuvable dans cette session.");
+        }
+
+        session.CurrentAnswererPlayerId = player.Id;
+        session.Status = GameSessionStatus.Running;
+        session.CurrentQuestionStartedAt = DateTime.UtcNow;
+
+        var existing = await db.RoundParticipants.Where(rp => rp.SessionId == id).ToListAsync();
+        db.RoundParticipants.RemoveRange(existing);
+        db.RoundParticipants.Add(new RoundParticipant { SessionId = id, PlayerId = player.Id });
+
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
+    /// <summary>Passe de la phase "réponse privée" à la phase "devinette" pour la question courante d'une
+    /// manche "à quoi pense l'autre" : désigne qui a le droit d'essayer de deviner (joueur ou équipe,
+    /// jamais le répondant lui-même), relance le minuteur.</summary>
+    [Authorize]
+    [HttpPost("{id:int}/partner-guess/start-guessing")]
+    public async Task<ActionResult<GameSessionStateDto>> StartPartnerGuessGuessing(int id, SetRoundParticipantsRequest request)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        var (round, _) = GetCurrentRoundAndQuestion(quiz, session);
+        if (round is null || round.FeatureTypeKey != "partner-guess" || session.Status != GameSessionStatus.Running || session.CurrentAnswererPlayerId is null)
+        {
+            return BadRequest("Cette manche n'est pas en phase de réponse privée.");
+        }
+
+        if (request.PlayerIds.Contains(session.CurrentAnswererPlayerId.Value))
+        {
+            return BadRequest("Le répondant ne peut pas deviner sa propre réponse.");
+        }
+
+        var validationError = await ApplyRoundParticipantsAsync(session, request.PlayerIds, request.TeamIds);
+        if (validationError is not null)
+        {
+            return BadRequest(validationError);
+        }
+
+        session.CurrentQuestionStartedAt = DateTime.UtcNow;
+        session.PausedAt = null;
+        session.CurrentBuzzHolderPlayerId = null;
+
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
     [Authorize]
     [HttpGet("{id:int}/pending-round-preview")]
     public async Task<ActionResult<RoundPreviewDto>> GetPendingRoundPreview(int id)
@@ -320,7 +470,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         }
 
         var (session, quiz) = loaded.Value;
-        if (session.Status != GameSessionStatus.AwaitingParticipants)
+        if (session.Status is not (GameSessionStatus.AwaitingParticipants or GameSessionStatus.AwaitingTeamMode))
         {
             return BadRequest("La session n'attend pas de désignation de participants.");
         }
@@ -455,11 +605,19 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
         var correctFinders = await GetCorrectFinderPseudos(session.Id, question.Id);
 
+        var awaitingDeferredResolution = engine.DefersScoringUntilWindowClose(round.ConfigJson) &&
+            await db.Answers.AnyAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.IsCorrect == null);
+
+        // Vue GM : le payload "brut" inclut la réponse du répondant comme réponse acceptée (à quoi pense
+        // l'autre), pour référence pendant la phase de devinette.
+        var adminPayloadJson = await ResolveEffectivePayloadJsonAsync(session, round, question);
+
         return Ok(new CurrentQuestionAdminDto(
             round.Id, round.Title, round.FeatureTypeKey,
-            question.Id, question.PayloadJson, round.ConfigJson,
+            question.Id, adminPayloadJson, round.ConfigJson,
             state.CurrentLevel, state.CurrentPoints, state.SecondsRemainingInStep, state.SecondsRemainingTotal, state.IsAnswerWindowOpen,
-            engine.IsBuzzerMode(round.ConfigJson), correctFinders, state.SecondsElapsedTotal, session.PausedAt is not null));
+            engine.IsBuzzerMode(round.ConfigJson), correctFinders, state.SecondsElapsedTotal, session.PausedAt is not null,
+            awaitingDeferredResolution));
     }
 
     [Authorize]
@@ -523,7 +681,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             var engine = engineRegistry.Get(round.FeatureTypeKey);
             if (engine.UsesRankBasedScoring(round.ConfigJson))
             {
-                var rank = await db.Answers.CountAsync(a => a.QuestionId == answer.QuestionId && a.IsCorrect == true && a.Id != answer.Id);
+                var rank = await db.Answers.CountAsync(a => a.SessionId == id && a.QuestionId == answer.QuestionId && a.IsCorrect == true && a.Id != answer.Id);
                 points = engine.PointsForRank(round.ConfigJson, rank);
             }
         }
@@ -571,8 +729,11 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         var engine = engineRegistry.Get(round.FeatureTypeKey);
         var holderId = session.CurrentBuzzHolderPlayerId.Value;
-        var points = await ComputePointsIfCorrect(engine, round.ConfigJson, question.Id, 0);
+        var points = await ComputePointsIfCorrect(engine, round.ConfigJson, session.Id, question.Id, 0);
         var holder = session.Players.Single(p => p.Id == holderId);
+
+        var buzzSubmittedAt = DateTime.UtcNow;
+        var buzzPointsAwarded = request.IsCorrect ? points : 0;
 
         db.Answers.Add(new Answer
         {
@@ -582,12 +743,19 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             RawAnswer = "(buzzer)",
             IsCorrect = request.IsCorrect,
             PendingPoints = points,
-            PointsAwarded = request.IsCorrect ? points : 0,
+            PointsAwarded = buzzPointsAwarded,
             TeamId = session.TeamScoringEnabled ? holder.TeamId : null,
             ValidationMode = AnswerValidationMode.Manual,
-            SubmittedAt = DateTime.UtcNow,
-            ValidatedByGmAt = DateTime.UtcNow
+            SubmittedAt = buzzSubmittedAt,
+            ValidatedByGmAt = buzzSubmittedAt
         });
+
+        if (request.IsCorrect)
+        {
+            // "À quoi pense l'autre" : la bonne réponse devinée vient du répondant (phase 1) — il gagne
+            // les mêmes points que le devineur, pas seulement ce dernier.
+            await AwardPartnerGuessAnswererBonusAsync(session, round, question, buzzPointsAwarded, buzzSubmittedAt);
+        }
 
         session.CurrentBuzzHolderPlayerId = null;
         await ResumeAfterReviewIfClearAsync(session, question.Id);
@@ -597,6 +765,12 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         {
             var playerDto = await BuildPlayerDto(holderId, session.Id, null);
             await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", playerDto);
+
+            if (round.FeatureTypeKey == "partner-guess" && session.CurrentAnswererPlayerId is not null)
+            {
+                var answererDto = await BuildPlayerDto(session.CurrentAnswererPlayerId.Value, session.Id, null);
+                await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", answererDto);
+            }
         }
 
         await BroadcastState(session, quiz);
@@ -758,7 +932,8 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         var engine = engineRegistry.Get(round.FeatureTypeKey);
         var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
-        var publicPayloadJson = engine.BuildPublicPayloadJson(question.PayloadJson);
+        var effectivePayloadForPlayer = await ResolveEffectivePayloadJsonAsync(session, round, question);
+        var publicPayloadJson = engine.BuildPublicPayloadJson(effectivePayloadForPlayer);
 
         var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == connectionToken);
         var lastAnswer = player is null ? null : await GetLastAnswer(player.Id, question.Id);
@@ -769,10 +944,32 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         var eligiblePlayerIds = await GetEligiblePlayerIdsAsync(session, round);
         var isSpectator = player is null || !eligiblePlayerIds.Contains(player.Id);
 
+        List<ClosestGuessEntryDto>? closestGuessEntries = null;
+        double? closestGuessTargetValue = null;
+        if (round.FeatureTypeKey == "closest-guess" && !state.IsAnswerWindowOpen)
+        {
+            var allAnswers = await db.Answers
+                .Include(a => a.Player)
+                .Where(a => a.SessionId == session.Id && a.QuestionId == question.Id)
+                .OrderBy(a => a.SubmittedAt)
+                .ToListAsync();
+
+            closestGuessEntries = allAnswers
+                .Select(a => new ClosestGuessEntryDto(a.Player!.Pseudo, a.RawAnswer, a.IsCorrect, a.IsCorrect is null ? null : a.PointsAwarded))
+                .ToList();
+
+            if (allAnswers.Any(a => a.IsCorrect is not null))
+            {
+                closestGuessTargetValue = engine.GetNumericTarget(question.PayloadJson);
+            }
+        }
+
         return Ok(new PlayerQuestionDto(
             question.Id, round.Title, round.FeatureTypeKey, publicPayloadJson,
             state.CurrentLevel, state.SecondsRemainingInStep, state.SecondsRemainingTotal, state.IsAnswerWindowOpen, hasAnswered, correctFinders, isSpectator,
-            engine.IsBuzzerMode(round.ConfigJson), state.SecondsElapsedTotal, session.PausedAt is not null));
+            engine.IsBuzzerMode(round.ConfigJson), state.SecondsElapsedTotal, session.PausedAt is not null,
+            lastAnswer?.IsCorrect, lastAnswer?.IsCorrect is not null ? lastAnswer.PointsAwarded : null,
+            closestGuessEntries, closestGuessTargetValue));
     }
 
     [AllowAnonymous]
@@ -868,10 +1065,6 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         }
 
         var engine = engineRegistry.Get(round.FeatureTypeKey);
-        if (engine.IsBuzzerMode(round.ConfigJson))
-        {
-            return BadRequest("Cette question se joue au buzzer : utilisez le bouton dédié.");
-        }
 
         var lastAnswer = await GetLastAnswer(player.Id, question.Id);
         if (lastAnswer is not null && !await CanPlayerRetryAsync(session, question, engine, round.ConfigJson, lastAnswer))
@@ -881,10 +1074,39 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         var submittedAt = DateTime.UtcNow;
 
+        // "À quoi pense l'autre", phase 1 : le répondant écrit TOUJOURS sa réponse en privé (avant même le
+        // check buzzer ci-dessous, qui ne concerne que la phase de devinette) — jamais notée, elle sert
+        // uniquement de cible pour la phase de devinette qui suit (voir StartPartnerGuessGuessing).
+        if (round.FeatureTypeKey == "partner-guess" && player.Id == session.CurrentAnswererPlayerId)
+        {
+            db.Answers.Add(new Answer
+            {
+                SessionId = session.Id,
+                PlayerId = player.Id,
+                QuestionId = question.Id,
+                RawAnswer = request.RawAnswer,
+                IsCorrect = null,
+                PendingPoints = 0,
+                PointsAwarded = 0,
+                ValidationMode = AnswerValidationMode.Auto,
+                SubmittedAt = submittedAt
+            });
+            await db.SaveChangesAsync();
+
+            return Ok(new SubmitAnswerResponse(null, 0, "Auto"));
+        }
+
+        if (engine.IsBuzzerMode(round.ConfigJson))
+        {
+            return BadRequest("Cette question se joue au buzzer : utilisez le bouton dédié.");
+        }
+
+        var effectivePayloadJson = await ResolveEffectivePayloadJsonAsync(session, round, question);
+
         var elapsedSeconds = SessionTiming.ComputeElapsedSeconds(session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
         // Calculé AVANT d'insérer cette réponse : en scoring au rang, le rang doit exclure la tentative en cours.
-        var pendingPoints = await ComputePointsIfCorrect(engine, round.ConfigJson, question.Id, elapsedSeconds);
-        var evaluation = engine.Evaluate(round.ConfigJson, question.PayloadJson, request.RawAnswer, session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
+        var pendingPoints = await ComputePointsIfCorrect(engine, round.ConfigJson, session.Id, question.Id, elapsedSeconds);
+        var evaluation = engine.Evaluate(round.ConfigJson, effectivePayloadJson, request.RawAnswer, session.CurrentQuestionStartedAt.Value, session.PausedAt, submittedAt);
         var pointsAwarded = evaluation.IsCorrect == true ? pendingPoints : 0;
 
         var answer = new Answer
@@ -903,9 +1125,18 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         db.Answers.Add(answer);
 
-        if (evaluation.IsCorrect is null)
+        if (evaluation.IsCorrect == true)
+        {
+            // "À quoi pense l'autre" : la bonne réponse devinée vient du répondant (phase 1) — il gagne
+            // les mêmes points que le devineur, pas seulement ce dernier.
+            await AwardPartnerGuessAnswererBonusAsync(session, round, question, pointsAwarded, submittedAt);
+        }
+
+        if (evaluation.IsCorrect is null && !engine.DefersScoringUntilWindowClose(round.ConfigJson))
         {
             // Le temps s'arrête tant que le GM n'a pas jugé cette réponse en attente de validation manuelle.
+            // Sans effet pour une feature à résolution différée (closest-guess) : la fenêtre doit rester
+            // ouverte pour laisser le temps aux autres joueurs de soumettre leur propre estimation.
             PauseForPendingReview(session);
         }
 
@@ -915,6 +1146,12 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         {
             var playerDto = await BuildPlayerDto(player.Id, session.Id, player.Pseudo);
             await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", playerDto);
+
+            if (evaluation.IsCorrect == true && round.FeatureTypeKey == "partner-guess" && session.CurrentAnswererPlayerId is not null)
+            {
+                var answererDto = await BuildPlayerDto(session.CurrentAnswererPlayerId.Value, session.Id, null);
+                await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", answererDto);
+            }
         }
         else
         {
@@ -997,6 +1234,11 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         // qu'on laisse s'écouler normalement avant de passer à la question suivante.
         var dirty = await FastForwardIfAllPlayersAnswered(session, round, question, engine);
 
+        // Feature à résolution différée (closest-guess) : le classement ne peut être calculé qu'une fois
+        // la fenêtre fermée. Doit tourner AVANT le calcul de allAnswered ci-dessous, sinon on avancerait à
+        // la question suivante sans jamais avoir noté les estimations en attente.
+        dirty |= await ResolveDeferredScoringIfDueAsync(session, round, question, engine);
+
         var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
         var allAnswered = await AllPlayersAnsweredCorrectly(session, round, question);
 
@@ -1037,11 +1279,38 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         return correctCount >= eligiblePlayerIds.Count;
     }
 
+    /// <summary>Pour une feature à résolution différée (closest-guess) : tout le monde a-t-il soumis une
+    /// estimation, indépendamment de si elle est jugée (IsCorrect reste null tant que non résolu) ?</summary>
+    private async Task<bool> AllEligiblePlayersSubmittedAsync(GameSession session, Round round, Question question)
+    {
+        var eligiblePlayerIds = await GetEligiblePlayerIdsAsync(session, round);
+        if (eligiblePlayerIds.Count == 0)
+        {
+            return false;
+        }
+
+        var answeredPlayerIds = await db.Answers
+            .Where(a => a.SessionId == session.Id && a.QuestionId == question.Id && eligiblePlayerIds.Contains(a.PlayerId))
+            .Select(a => a.PlayerId)
+            .Distinct()
+            .ToListAsync();
+
+        return eligiblePlayerIds.All(answeredPlayerIds.Contains);
+    }
+
     /// <summary>Liste des joueurs autorisés à jouer la manche courante : tout le monde si elle n'est pas
     /// restreinte, sinon la sélection du GM (joueurs directs + membres des équipes désignées).</summary>
     private async Task<List<int>> GetEligiblePlayerIdsAsync(GameSession session, Round round)
     {
-        if (!round.RestrictsParticipants)
+        // "À quoi pense l'autre" est toujours restreinte (au répondant en phase 1, aux devineurs désignés
+        // en phase 2) même si Round.RestrictsParticipants n'a pas été coché à l'édition — la restriction
+        // se joue entièrement en direct, question par question. Un thème (sous-manche) est toujours
+        // restreint lui aussi : ChooseTheme impose systématiquement une désignation de participants avant
+        // de le lancer, indépendamment de RestrictsParticipants qui n'est même pas exposé à l'édition pour
+        // les sous-manches — sans ce cas particulier, la sélection du GM était enregistrée mais totalement
+        // ignorée, tous les joueurs restaient éligibles et pouvaient marquer des points.
+        var isThemeSubRound = round.ParentRoundId is not null;
+        if (!round.RestrictsParticipants && round.FeatureTypeKey != "partner-guess" && !isThemeSubRound)
         {
             return session.Players.Select(p => p.Id).ToList();
         }
@@ -1052,6 +1321,73 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         var teamPlayerIds = session.Players.Where(p => p.TeamId is not null && teamIds.Contains(p.TeamId.Value)).Select(p => p.Id);
 
         return directPlayerIds.Concat(teamPlayerIds).Distinct().ToList();
+    }
+
+    /// <summary>
+    /// "À quoi pense l'autre" : compose à la volée un payload avec la réponse privée du répondant comme
+    /// "réponse acceptée", pour que PartnerGuessEngine (qui hérite tel quel de QaEngine) évalue
+    /// normalement la tentative du devineur. Payload inchangé pour toute autre feature — le contrôleur
+    /// reste agnostique de la feature dans tous les autres cas.
+    /// </summary>
+    private async Task<string> ResolveEffectivePayloadJsonAsync(GameSession session, Round round, Question question)
+    {
+        if (round.FeatureTypeKey != "partner-guess")
+        {
+            return question.PayloadJson;
+        }
+
+        var answererAnswer = session.CurrentAnswererPlayerId is null
+            ? null
+            : await db.Answers
+                .Where(a => a.PlayerId == session.CurrentAnswererPlayerId && a.QuestionId == question.Id)
+                .OrderByDescending(a => a.SubmittedAt)
+                .Select(a => a.RawAnswer)
+                .FirstOrDefaultAsync();
+
+        string questionText;
+        try
+        {
+            questionText = JsonDocument.Parse(question.PayloadJson).RootElement.GetProperty("questionText").GetString() ?? "";
+        }
+        catch
+        {
+            questionText = "";
+        }
+
+        var acceptedAnswers = answererAnswer is null ? [] : new[] { answererAnswer };
+        return JsonSerializer.Serialize(new { questionText, acceptedAnswers });
+    }
+
+    /// <summary>"À quoi pense l'autre" : chaque fois qu'un devineur marque des points (buzzer ou saisie
+    /// auto-validée), le répondant de la phase 1 gagne le même montant — c'est sa réponse qui a rendu le
+    /// point possible, pas seulement celle du devineur. Sans effet si points &lt;= 0 (rien à gagner).</summary>
+    private async Task AwardPartnerGuessAnswererBonusAsync(GameSession session, Round round, Question question, int points, DateTime submittedAt)
+    {
+        if (round.FeatureTypeKey != "partner-guess" || session.CurrentAnswererPlayerId is null || points <= 0)
+        {
+            return;
+        }
+
+        var answerer = session.Players.SingleOrDefault(p => p.Id == session.CurrentAnswererPlayerId);
+        if (answerer is null)
+        {
+            return;
+        }
+
+        db.Answers.Add(new Answer
+        {
+            SessionId = session.Id,
+            PlayerId = answerer.Id,
+            QuestionId = question.Id,
+            RawAnswer = "(bonus répondant)",
+            IsCorrect = true,
+            PendingPoints = points,
+            PointsAwarded = points,
+            TeamId = session.TeamScoringEnabled ? answerer.TeamId : null,
+            ValidationMode = AnswerValidationMode.Auto,
+            SubmittedAt = submittedAt,
+            ValidatedByGmAt = submittedAt
+        });
     }
 
     /// <summary>Enregistre la sélection de participants du GM pour la manche restreinte en attente (validation
@@ -1104,6 +1440,122 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         return null;
     }
 
+    /// <summary>Déclenche la résolution en lot d'une feature à résolution différée (closest-guess) dès que
+    /// la fenêtre de réponse est fermée — seulement en mode Auto (sinon le GM déclenche lui-même via
+    /// l'endpoint dédié) et s'il reste des réponses en attente.</summary>
+    private async Task<bool> ResolveDeferredScoringIfDueAsync(GameSession session, Round round, Question question, IFeatureEngine engine)
+    {
+        if (!engine.DefersScoringUntilWindowClose(round.ConfigJson) || !engine.ShouldAutoResolveDeferredScoring(round.ConfigJson))
+        {
+            return false;
+        }
+
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
+        if (state.IsAnswerWindowOpen)
+        {
+            return false;
+        }
+
+        var pending = await db.Answers.Where(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.IsCorrect == null).ToListAsync();
+        if (pending.Count == 0)
+        {
+            return false;
+        }
+
+        await ResolveDeferredScoringAsync(session, round, question, engine, pending);
+        return true;
+    }
+
+    /// <summary>
+    /// Classe les réponses en attente par proximité à la valeur cible (closest-guess) et attribue les
+    /// points via la même formule que le scoring au rang (PointsForRank). En mode équipe, le classement
+    /// se fait sur la MOYENNE des estimations de chaque équipe plutôt que sur chaque estimation
+    /// individuelle — les joueurs sans équipe (mode équipe actif mais pas encore assignés) sont classés
+    /// individuellement, pour ne pas perdre silencieusement leur estimation.
+    /// </summary>
+    private async Task ResolveDeferredScoringAsync(GameSession session, Round round, Question question, IFeatureEngine engine, List<Answer> pendingAnswers)
+    {
+        var target = engine.GetNumericTarget(question.PayloadJson);
+        if (target is null)
+        {
+            return;
+        }
+
+        var parsed = pendingAnswers
+            .Select(a => (Answer: a, Value: double.TryParse(a.RawAnswer, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? (double?)v : null))
+            .ToList();
+
+        foreach (var entry in parsed.Where(p => p.Value is null))
+        {
+            // Estimation illisible (vide, non numérique…) : ne peut pas être classée, ne marque jamais.
+            entry.Answer.IsCorrect = false;
+            entry.Answer.PointsAwarded = 0;
+            entry.Answer.ValidatedByGmAt = DateTime.UtcNow;
+        }
+
+        var valid = parsed.Where(p => p.Value is not null).ToList();
+        var playerTeams = session.Players.ToDictionary(p => p.Id, p => p.TeamId);
+
+        var teamEntries = session.TeamScoringEnabled
+            ? valid.Where(p => playerTeams.GetValueOrDefault(p.Answer.PlayerId) is not null).ToList()
+            : [];
+        var soloEntries = session.TeamScoringEnabled
+            ? valid.Where(p => playerTeams.GetValueOrDefault(p.Answer.PlayerId) is null).ToList()
+            : valid;
+
+        // Arrondi à 1e-6 pour grouper les égalités : évite qu'un simple bruit de virgule flottante sépare
+        // deux estimations pourtant identiques en distance à la cible.
+        if (teamEntries.Count > 0)
+        {
+            var teamGroups = teamEntries
+                .GroupBy(p => playerTeams[p.Answer.PlayerId]!.Value)
+                .Select(g => new { TeamId = g.Key, Entries = g.ToList(), AverageGuess = g.Average(p => p.Value!.Value) })
+                .GroupBy(t => Math.Round(Math.Abs(t.AverageGuess - target.Value), 6))
+                .OrderBy(g => g.Key)
+                .ToList();
+
+            var rank = 0;
+            foreach (var tieGroup in teamGroups)
+            {
+                var points = engine.PointsForRank(round.ConfigJson, rank);
+                foreach (var team in tieGroup)
+                {
+                    foreach (var entry in team.Entries)
+                    {
+                        entry.Answer.IsCorrect = points > 0;
+                        entry.Answer.PointsAwarded = points;
+                        entry.Answer.TeamId = team.TeamId;
+                        entry.Answer.ValidatedByGmAt = DateTime.UtcNow;
+                    }
+                }
+                // Classement "olympique" : des équipes ex æquo occupent le même rang, le rang suivant saute
+                // d'autant (2 équipes à égalité au rang 0 → la suivante est au rang 2, pas 1).
+                rank += tieGroup.Count();
+            }
+        }
+
+        if (soloEntries.Count > 0)
+        {
+            var tieGroups = soloEntries
+                .GroupBy(p => Math.Round(Math.Abs(p.Value!.Value - target.Value), 6))
+                .OrderBy(g => g.Key)
+                .ToList();
+
+            var rank = 0;
+            foreach (var tieGroup in tieGroups)
+            {
+                var points = engine.PointsForRank(round.ConfigJson, rank);
+                foreach (var entry in tieGroup)
+                {
+                    entry.Answer.IsCorrect = points > 0;
+                    entry.Answer.PointsAwarded = points;
+                    entry.Answer.ValidatedByGmAt = DateTime.UtcNow;
+                }
+                rank += tieGroup.Count();
+            }
+        }
+    }
+
     private async Task<bool> FastForwardIfAllPlayersAnswered(GameSession session, Round round, Question question, IFeatureEngine engine)
     {
         // Le temps est gelé pour une revue GM en cours (validation manuelle ou buzzer) : ne pas
@@ -1114,7 +1566,14 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return false;
         }
 
-        if (!await AllPlayersAnsweredCorrectly(session, round, question))
+        // Feature à résolution différée (closest-guess) : "trouvé" n'a pas de sens avant la résolution en
+        // lot (IsCorrect reste null pour tout le monde) — le critère de complétion est juste "tout le
+        // monde a soumis une estimation", pas "tout le monde a la bonne réponse".
+        var allAnswered = engine.DefersScoringUntilWindowClose(round.ConfigJson)
+            ? await AllEligiblePlayersSubmittedAsync(session, round, question)
+            : await AllPlayersAnsweredCorrectly(session, round, question);
+
+        if (!allAnswered)
         {
             return false;
         }
@@ -1180,11 +1639,11 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
     /// est le nombre de bonnes réponses déjà enregistrées pour cette question (0 = premier) ; sinon la valeur
     /// classique (palier de zoom / points fixes) au temps écoulé donné.
     /// </summary>
-    private async Task<int> ComputePointsIfCorrect(IFeatureEngine engine, string configJson, int questionId, double elapsedSeconds)
+    private async Task<int> ComputePointsIfCorrect(IFeatureEngine engine, string configJson, int sessionId, int questionId, double elapsedSeconds)
     {
         if (engine.UsesRankBasedScoring(configJson))
         {
-            var rank = await db.Answers.CountAsync(a => a.QuestionId == questionId && a.IsCorrect == true);
+            var rank = await db.Answers.CountAsync(a => a.SessionId == sessionId && a.QuestionId == questionId && a.IsCorrect == true);
             return engine.PointsForRank(configJson, rank);
         }
 
@@ -1210,7 +1669,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         // exclusion, la requête la trouverait toujours "en attente" (IsCorrect NULL côté base) et le
         // minuteur resterait bloqué en pause indéfiniment.
         var stillPending = await db.Answers
-            .AnyAsync(a => a.QuestionId == questionId && a.IsCorrect == null && a.Id != excludingAnswerId);
+            .AnyAsync(a => a.SessionId == session.Id && a.QuestionId == questionId && a.IsCorrect == null && a.Id != excludingAnswerId);
         if (stillPending || session.CurrentBuzzHolderPlayerId is not null)
         {
             return;
@@ -1348,6 +1807,21 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return;
         }
 
+        // "À quoi pense l'autre" : chaque question désigne son propre répondant, jamais réutilisé d'une
+        // question à l'autre — retour à AwaitingAnswerer plutôt que de repartir directement sur Running.
+        if (currentRound?.FeatureTypeKey == "partner-guess")
+        {
+            session.Status = GameSessionStatus.AwaitingAnswerer;
+            session.CurrentQuestionStartedAt = null;
+            session.PausedAt = null;
+            session.CurrentBuzzHolderPlayerId = null;
+            session.CurrentAnswererPlayerId = null;
+
+            var staleParticipants = await db.RoundParticipants.Where(rp => rp.SessionId == session.Id).ToListAsync();
+            db.RoundParticipants.RemoveRange(staleParticipants);
+            return;
+        }
+
         session.Status = GameSessionStatus.Running;
         session.CurrentQuestionStartedAt = DateTime.UtcNow;
         session.PausedAt = null;
@@ -1365,11 +1839,22 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         session.PausedAt = null;
         session.TeamScoringEnabled = false;
         session.CurrentThemeSubRoundId = null;
+        session.CurrentAnswererPlayerId = null;
 
         var existingParticipants = await db.RoundParticipants.Where(rp => rp.SessionId == session.Id).ToListAsync();
         db.RoundParticipants.RemoveRange(existingParticipants);
 
         var round = rounds[roundIndex];
+
+        if (round.FeatureTypeKey == "partner-guess")
+        {
+            // Pas de notion de RestrictsParticipants ici : chaque question désigne son propre répondant,
+            // le GM le choisit avant même que le minuteur ne démarre (voir SetPartnerGuessAnswerer).
+            session.CurrentQuestionIndex = 0;
+            session.Status = GameSessionStatus.AwaitingAnswerer;
+            session.CurrentQuestionStartedAt = null;
+            return;
+        }
 
         if (round.IsThemePicker)
         {
@@ -1395,7 +1880,14 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         if (round.RestrictsParticipants)
         {
+            // La sélection de participants (ApplyRoundParticipantsAsync) couvre déjà le choix du mode
+            // équipe pour cette manche (sélectionner une équipe l'active) : pas besoin du palier AwaitingTeamMode.
             session.Status = GameSessionStatus.AwaitingParticipants;
+            session.CurrentQuestionStartedAt = null;
+        }
+        else if (session.Teams.Count > 0)
+        {
+            session.Status = GameSessionStatus.AwaitingTeamMode;
             session.CurrentQuestionStartedAt = null;
         }
         else
@@ -1508,11 +2000,16 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
                 .ToList();
         }
 
+        var answererPseudo = session.CurrentAnswererPlayerId is null
+            ? null
+            : session.Players.SingleOrDefault(p => p.Id == session.CurrentAnswererPlayerId)?.Pseudo;
+
         return new GameSessionStateDto(
             session.Id, session.InviteToken, quiz.Title, session.Status,
             session.CurrentRoundIndex, session.CurrentQuestionIndex, topLevelRounds.Count, session.ScoreboardVisible,
             participantPlayerIds, participantTeamIds, session.TeamScoringEnabled,
-            session.CurrentBuzzHolderPlayerId, buzzHolderPseudo, players, teams, themeBoard);
+            session.CurrentBuzzHolderPlayerId, buzzHolderPseudo, players, teams, themeBoard,
+            session.CurrentAnswererPlayerId, answererPseudo);
     }
 
     private async Task<Dictionary<int, int>> ComputeAllScores(int sessionId)

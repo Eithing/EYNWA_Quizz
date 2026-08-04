@@ -10,7 +10,9 @@ using Microsoft.IdentityModel.Tokens;
 using QuizParty.Api.Data;
 using QuizParty.Api.Features;
 using QuizParty.Api.Features.BlindTest;
+using QuizParty.Api.Features.ClosestGuess;
 using QuizParty.Api.Features.ImageGuess;
+using QuizParty.Api.Features.PartnerGuess;
 using QuizParty.Api.Features.Qa;
 using QuizParty.Api.Features.Shared;
 using QuizParty.Api.Features.Zoom;
@@ -34,11 +36,15 @@ builder.Services.AddSingleton<IQuizFeature, ZoomImageFeature>();
 builder.Services.AddSingleton<IQuizFeature, QaTextFeature>();
 builder.Services.AddSingleton<IQuizFeature, BlindTestFeature>();
 builder.Services.AddSingleton<IQuizFeature, ImageGuessFeature>();
+builder.Services.AddSingleton<IQuizFeature, ClosestGuessFeature>();
+builder.Services.AddSingleton<IQuizFeature, PartnerGuessFeature>();
 builder.Services.AddSingleton<FeatureRegistry>();
 builder.Services.AddSingleton<IFeatureEngine, ZoomImageEngine>();
 builder.Services.AddSingleton<IFeatureEngine, QaEngine>();
 builder.Services.AddSingleton<IFeatureEngine, BlindTestEngine>();
 builder.Services.AddSingleton<IFeatureEngine, ImageGuessEngine>();
+builder.Services.AddSingleton<IFeatureEngine, ClosestGuessEngine>();
+builder.Services.AddSingleton<IFeatureEngine, PartnerGuessEngine>();
 builder.Services.AddSingleton<FeatureEngineRegistry>();
 
 builder.Services.AddDbContext<QuizPartyDbContext>(options =>

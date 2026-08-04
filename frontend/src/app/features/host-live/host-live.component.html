@@ -22,12 +22,17 @@
         @if (s.status === 'RoundIntermission') {
           <button type="button" class="btn btn-primary" (click)="next()">Lancer la manche suivante</button>
         }
+        @if (s.status === 'ChoosingTheme') {
+          <button type="button" class="btn btn-primary" (click)="next()">
+            {{ allThemesResolved() ? 'Manche suivante' : 'Passer à la manche suivante (thèmes restants ignorés)' }}
+          </button>
+        }
         @if (s.status !== 'Lobby') {
           <button type="button" class="btn btn-secondary" (click)="toggleScoreboard()">
             {{ s.scoreboardVisible ? 'Masquer les scores' : 'Afficher les scores aux joueurs' }}
           </button>
         }
-        @if (s.teams.length > 0 && s.status !== 'Lobby') {
+        @if (s.teams.length > 0 && s.status !== 'Lobby' && s.status !== 'AwaitingTeamMode') {
           <button type="button" class="btn btn-secondary" (click)="toggleTeamScoring()">
             {{ s.teamScoringEnabled ? 'Désactiver le mode équipe' : 'Activer le mode équipe' }} (manche en cours)
           </button>
@@ -83,18 +88,18 @@
         }
       } @else {
         <div class="host-live__team-builder">
-          @for (draft of teamDrafts(); track $index) {
+          @for (draft of teamDrafts(); track $index; let draftIndex = $index) {
             <div class="host-live__team-draft">
-              <input type="text" placeholder="Nom de l'équipe" [value]="draft.name" (input)="renameTeamDraft($index, $any($event.target).value)" />
-              <button type="button" class="host-live__edit-score-btn" title="Supprimer cette équipe" (click)="removeTeamDraft($index)">✕</button>
+              <input type="text" placeholder="Nom de l'équipe" [value]="draft.name" (input)="renameTeamDraft(draftIndex, $any($event.target).value)" />
+              <button type="button" class="host-live__edit-score-btn" title="Supprimer cette équipe" (click)="removeTeamDraft(draftIndex)">✕</button>
               <div class="host-live__team-draft-players">
                 @for (player of s.players; track player.id) {
-                  <label [class.host-live__team-draft-player--disabled]="isPlayerTakenByOtherDraft($index, player.id)">
+                  <label [class.host-live__team-draft-player--disabled]="isPlayerTakenByOtherDraft(draftIndex, player.id)">
                     <input
                       type="checkbox"
                       [checked]="draft.playerIds.has(player.id)"
-                      [disabled]="isPlayerTakenByOtherDraft($index, player.id)"
-                      (change)="toggleDraftPlayer($index, player.id)"
+                      [disabled]="isPlayerTakenByOtherDraft(draftIndex, player.id)"
+                      (change)="toggleDraftPlayer(draftIndex, player.id)"
                     />
                     {{ player.pseudo }}
                   </label>
@@ -194,6 +199,44 @@
               </li>
             }
           </ul>
+        } @else if (s.status === 'AwaitingAnswerer') {
+          <p class="host-live__hint">Désigne le joueur qui répond en privé à cette question :</p>
+          <ul class="host-live__target-picker">
+            @for (player of s.players; track player.id) {
+              <li>
+                <span>{{ player.pseudo }}</span>
+                <button type="button" class="btn btn-primary" (click)="setPartnerGuessAnswerer(player.id)">Désigner</button>
+              </li>
+            } @empty {
+              <p class="host-live__hint">Personne n'a encore rejoint.</p>
+            }
+          </ul>
+        } @else if (s.status === 'AwaitingTeamMode') {
+          @if (pendingRoundPreview(); as preview) {
+            <p class="host-live__question-title">{{ preview.roundTitle }}</p>
+
+            @if (pendingRoundImageUrl(); as imageUrl) {
+              <img [src]="imageUrl" alt="Aperçu de la première question" class="host-live__image" />
+            }
+
+            @if (pendingRoundQaText(); as text) {
+              <p class="host-live__qa-text">{{ text }}</p>
+            }
+
+            @if (pendingRoundAudioUrl(); as audioUrl) {
+              <app-audio-player [audioUrl]="audioUrl" [showTimeline]="true" />
+            }
+
+            @if (pendingRoundImageGuessUrl(); as imageUrl) {
+              <img [src]="imageUrl" alt="Aperçu de la première question" class="host-live__image" />
+            }
+          }
+
+          <p class="host-live__hint">Cette manche se joue-t-elle en mode équipe ?</p>
+          <div class="host-live__controls">
+            <button type="button" class="btn btn-primary" (click)="onSetRoundTeamMode(true)">Mode équipe</button>
+            <button type="button" class="btn btn-secondary" (click)="onSetRoundTeamMode(false)">Mode solo</button>
+          </div>
         } @else if (currentQuestion() !== null) {
           @let question = currentQuestion()!;
           <p class="host-live__question-title">{{ question.roundTitle }}</p>
@@ -228,6 +271,31 @@
             }
           }
 
+          @if (currentClosestGuessPayload(); as closestGuess) {
+            <p class="host-live__qa-text">{{ closestGuess.questionText }}</p>
+            <p class="host-live__qa-hint">Valeur exacte : {{ closestGuess.targetValue }}</p>
+          }
+
+          @if (currentPartnerGuessPayload(); as partnerGuess) {
+            <p class="host-live__qa-text">{{ partnerGuess.questionText }}</p>
+            @if (isPartnerGuessPhase1()) {
+              <p class="host-live__qa-hint">
+                Phase privée en cours — <strong>{{ s.currentAnswererPseudo }}</strong> répond seul(e), les autres attendent.
+              </p>
+              <button type="button" class="btn btn-primary" (click)="togglePartnerGuessSelector()">Passer à la devinette</button>
+              @if (partnerGuessSelectorOpen()) {
+                <app-participant-selector
+                  [players]="partnerGuessGuesserPool().players"
+                  [teams]="partnerGuessGuesserPool().teams"
+                  confirmLabel="Lancer la devinette"
+                  (confirm)="startPartnerGuessGuessing($event)"
+                />
+              }
+            } @else if (partnerGuess.acceptedAnswers.length > 0) {
+              <p class="host-live__qa-hint">Réponse du répondant : {{ partnerGuess.acceptedAnswers.join(', ') }}</p>
+            }
+          }
+
           <div class="host-live__metrics">
             @if (question.featureTypeKey === 'zoom-image') {
               <span>Niveau de zoom : {{ question.currentLevel }}</span>
@@ -239,6 +307,10 @@
             <span>Points si trouvé maintenant : {{ question.currentPoints }}</span>
             <span>Fenêtre de réponse : {{ question.isAnswerWindowOpen ? 'ouverte' : 'fermée' }}</span>
           </div>
+
+          @if (question.awaitingDeferredResolution) {
+            <button type="button" class="btn btn-primary" (click)="revealDeferredScoring()">Révéler le classement</button>
+          }
 
           @if (question.isBuzzerMode) {
             @if (s.currentBuzzHolderPseudo) {

@@ -3,7 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { GameSignalrService } from '../../core/services/game-signalr.service';
 import { MediaService } from '../../core/services/media.service';
 import { SessionService } from '../../core/services/session.service';
-import { AnswerFeedItem, CurrentQuestionAdmin, GameSessionState, RoundPreview } from '../../models/session.model';
+import { AnswerFeedItem, CurrentQuestionAdmin, GameSessionState, Player, RoundPreview, Team } from '../../models/session.model';
 import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
 import { ParticipantSelection, ParticipantSelectorComponent } from '../../shared/components/participant-selector/participant-selector.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
@@ -42,6 +42,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   protected readonly teamDrafts = signal<TeamDraft[]>([]);
 
   protected readonly themeSelectorOpenId = signal<number | null>(null);
+  protected readonly partnerGuessSelectorOpen = signal(false);
 
   protected readonly pendingRoundImageUrl = computed(() => {
     const preview = this.pendingRoundPreview();
@@ -145,7 +146,24 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     }
   });
 
+  protected readonly currentClosestGuessPayload = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'closest-guess') {
+      return null;
+    }
+    try {
+      return JSON.parse(question.payloadJson) as { questionText: string; targetValue: number };
+    } catch {
+      return null;
+    }
+  });
+
   protected readonly anyThemeHidden = computed(() => (this.state()?.themeBoard ?? []).some((t) => !t.isRevealed));
+
+  protected readonly allThemesResolved = computed(() => {
+    const board = this.state()?.themeBoard ?? [];
+    return board.length > 0 && board.every((t) => t.resolution !== 'Pending');
+  });
 
   protected readonly participantBanner = computed(() => {
     const s = this.state();
@@ -161,6 +179,40 @@ export class HostLiveComponent implements OnInit, OnDestroy {
       return names.length > 0 ? `Manche restreinte : ${names.join(', ')} — les autres sont spectateurs.` : null;
     }
     return null;
+  });
+
+  protected readonly currentPartnerGuessPayload = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'partner-guess') {
+      return null;
+    }
+    try {
+      return JSON.parse(question.payloadJson) as { questionText: string; acceptedAnswers: string[] };
+    } catch {
+      return null;
+    }
+  });
+
+  /** Phase 1 encore en cours (le répondant n'a pas fini) : les participants désignés sont encore
+   * uniquement le répondant lui-même — le GM peut à tout moment passer à la phase de devinette. */
+  protected readonly isPartnerGuessPhase1 = computed(() => {
+    const s = this.state();
+    if (!s || s.status !== 'Running' || this.currentQuestion()?.featureTypeKey !== 'partner-guess') {
+      return false;
+    }
+    return (
+      s.currentAnswererPlayerId !== null &&
+      s.currentRoundParticipantPlayerIds.length === 1 &&
+      s.currentRoundParticipantPlayerIds[0] === s.currentAnswererPlayerId
+    );
+  });
+
+  protected readonly partnerGuessGuesserPool = computed<{ players: Player[]; teams: Team[] }>(() => {
+    const s = this.state();
+    if (!s) {
+      return { players: [], teams: [] };
+    }
+    return { players: s.players.filter((p) => p.id !== s.currentAnswererPlayerId), teams: s.teams };
   });
 
   constructor(
@@ -266,6 +318,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
       .subscribe((state) => this.applyState(state));
   }
 
+  protected onSetRoundTeamMode(enabled: boolean): void {
+    this.sessionService.setRoundTeamMode(this.sessionId, enabled).subscribe((state) => this.applyState(state));
+  }
+
   protected resolveBuzz(isCorrect: boolean): void {
     this.sessionService.resolveBuzz(this.sessionId, isCorrect).subscribe((state) => this.applyState(state));
   }
@@ -285,7 +341,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   private refreshCurrentQuestion(): void {
     const state = this.state();
 
-    if (state?.status === 'AwaitingParticipants') {
+    if (state?.status === 'AwaitingParticipants' || state?.status === 'AwaitingTeamMode') {
       this.currentQuestion.set(null);
       this.sessionService.getPendingRoundPreview(this.sessionId).subscribe({
         next: (preview) => this.pendingRoundPreview.set(preview),
@@ -428,6 +484,25 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected revealTheme(subRoundId: number): void {
     this.sessionService.revealThemes(this.sessionId, subRoundId).subscribe((state) => this.applyState(state));
+  }
+
+  protected revealDeferredScoring(): void {
+    this.sessionService.revealDeferredScoring(this.sessionId).subscribe(() => this.refreshState());
+  }
+
+  protected setPartnerGuessAnswerer(playerId: number): void {
+    this.sessionService.setPartnerGuessAnswerer(this.sessionId, playerId).subscribe((state) => this.applyState(state));
+  }
+
+  protected togglePartnerGuessSelector(): void {
+    this.partnerGuessSelectorOpen.update((open) => !open);
+  }
+
+  protected startPartnerGuessGuessing(selection: ParticipantSelection): void {
+    this.sessionService.startPartnerGuessGuessing(this.sessionId, selection.playerIds, selection.teamIds).subscribe((state) => {
+      this.partnerGuessSelectorOpen.set(false);
+      this.applyState(state);
+    });
   }
 
   private refreshAnswerFeed(): void {

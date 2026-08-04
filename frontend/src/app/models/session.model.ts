@@ -5,6 +5,8 @@ export type GameSessionStatus =
   | 'RoundIntermission'
   | 'AwaitingParticipants'
   | 'ChoosingTheme'
+  | 'AwaitingAnswerer'
+  | 'AwaitingTeamMode'
   | 'Finished';
 
 export interface Player {
@@ -53,6 +55,9 @@ export interface GameSessionState {
   teams: Team[];
   /** Non-null seulement quand la manche courante est une manche à thèmes. */
   themeBoard: ThemeBoardEntry[] | null;
+  /** Manche "à quoi pense l'autre" : joueur désigné pour répondre en privé à la question courante. */
+  currentAnswererPlayerId: number | null;
+  currentAnswererPseudo: string | null;
 }
 
 export interface CurrentQuestionAdmin {
@@ -71,6 +76,8 @@ export interface CurrentQuestionAdmin {
   correctFinders: string[];
   secondsElapsedTotal: number;
   isPaused: boolean;
+  /** Vrai pour closest-guess quand il reste des estimations en attente de classement. */
+  awaitingDeferredResolution: boolean;
 }
 
 export interface AnswerFeedItem {
@@ -113,6 +120,22 @@ export interface PlayerQuestion {
   isBuzzerMode: boolean;
   secondsElapsedTotal: number;
   isPaused: boolean;
+  /** Résultat de la dernière tentative du joueur, une fois jugée — null tant qu'aucun verdict n'existe
+   * (utile pour les features à résolution différée comme closest-guess). */
+  myLastAnswerIsCorrect: boolean | null;
+  myLastAnswerPoints: number | null;
+  /** closest-guess uniquement : tous les essais, visibles dès la fenêtre fermée (avant même la
+   * révélation du classement — isCorrect/pointsAwarded par entrée restent null jusque-là). */
+  closestGuessEntries: ClosestGuessEntry[] | null;
+  /** closest-guess uniquement : la vraie valeur, révélée seulement une fois le classement résolu. */
+  closestGuessTargetValue: number | null;
+}
+
+export interface ClosestGuessEntry {
+  playerPseudo: string;
+  rawAnswer: string;
+  isCorrect: boolean | null;
+  pointsAwarded: number | null;
 }
 
 export interface RoundPreview {
@@ -138,4 +161,8 @@ export interface BlindTestPublicPayload {
 
 export interface ImageGuessPublicPayload {
   imageUrl: string;
+}
+
+export interface ClosestGuessPublicPayload {
+  questionText: string;
 }

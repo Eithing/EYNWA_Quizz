@@ -1,0 +1,15 @@
+.partner-guess-question-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  textarea {
+    resize: vertical;
+  }
+}
+
+.partner-guess-question-editor__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}

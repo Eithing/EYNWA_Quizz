@@ -3,8 +3,11 @@ import { FormsModule } from '@angular/forms';
 import { FeatureMeta } from '../../../../models/feature.model';
 import { QuestionDraft, RoundDraft, toQuestionDraft, toRoundDraft } from '../../models/round-draft.model';
 import { BlindTestQuestionEditorComponent } from '../blind-test-question-editor/blind-test-question-editor.component';
+import { ClosestGuessQuestionEditorComponent } from '../closest-guess-question-editor/closest-guess-question-editor.component';
+import { ClosestGuessRoundConfigComponent } from '../closest-guess-round-config/closest-guess-round-config.component';
 import { FeaturePickerComponent } from '../feature-picker/feature-picker.component';
 import { ImageGuessQuestionEditorComponent } from '../image-guess-question-editor/image-guess-question-editor.component';
+import { PartnerGuessQuestionEditorComponent } from '../partner-guess-question-editor/partner-guess-question-editor.component';
 import { QaQuestionEditorComponent } from '../qa-question-editor/qa-question-editor.component';
 import { QaRoundConfigComponent } from '../qa-round-config/qa-round-config.component';
 import { ZoomQuestionEditorComponent } from '../zoom-question-editor/zoom-question-editor.component';
@@ -20,6 +23,9 @@ import { ZoomRoundConfigComponent } from '../zoom-round-config/zoom-round-config
     QaQuestionEditorComponent,
     BlindTestQuestionEditorComponent,
     ImageGuessQuestionEditorComponent,
+    ClosestGuessQuestionEditorComponent,
+    ClosestGuessRoundConfigComponent,
+    PartnerGuessQuestionEditorComponent,
     FeaturePickerComponent,
     RoundEditorComponent
   ],
@@ -37,8 +43,12 @@ export class RoundEditorComponent {
   protected readonly isQaText = computed(() => this.round().featureTypeKey === 'qa-text');
   protected readonly isBlindTest = computed(() => this.round().featureTypeKey === 'blind-test');
   protected readonly isImageGuess = computed(() => this.round().featureTypeKey === 'image-guess');
-  // qa-text, blind-test et image-guess partagent exactement la même configuration de manche.
-  protected readonly usesQaRoundConfig = computed(() => this.isQaText() || this.isBlindTest() || this.isImageGuess());
+  protected readonly isClosestGuess = computed(() => this.round().featureTypeKey === 'closest-guess');
+  protected readonly isPartnerGuess = computed(() => this.round().featureTypeKey === 'partner-guess');
+  // qa-text, blind-test, image-guess et partner-guess partagent exactement la même configuration de manche.
+  protected readonly usesQaRoundConfig = computed(
+    () => this.isQaText() || this.isBlindTest() || this.isImageGuess() || this.isPartnerGuess()
+  );
 
   protected readonly addingTheme = signal(false);
   protected readonly selectedSubRoundClientId = signal<number | null>(null);

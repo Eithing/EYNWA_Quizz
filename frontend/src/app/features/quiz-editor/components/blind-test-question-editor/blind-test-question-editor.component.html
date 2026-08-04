@@ -3,7 +3,7 @@
     <label>Fichier audio</label>
 
     @if (payload().audioUrl) {
-      <app-audio-player [audioUrl]="resolveAudioUrl(payload().audioUrl)" />
+      <app-audio-player [audioUrl]="resolveAudioUrl(payload().audioUrl)" [showTimeline]="true" />
     }
 
     <label class="blind-test-question-editor__upload">

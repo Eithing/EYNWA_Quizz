@@ -57,4 +57,21 @@ public interface IFeatureEngine
 
     /// <summary>Points pour le n-ième joueur à répondre correctement (rang 0-based : 0 = premier). Sans effet si UsesRankBasedScoring est faux.</summary>
     int PointsForRank(string configJson, int correctAnswerRank) => 0;
+
+    /// <summary>
+    /// Vrai pour une feature dont le classement ne peut être calculé qu'une fois la fenêtre de réponse
+    /// fermée (ex: closest-guess — on ne sait qui est le plus proche qu'une fois toutes les estimations
+    /// reçues). Dans ce cas, Evaluate() renvoie systématiquement (null, 0) sans déclencher la pause du
+    /// minuteur habituelle du mode Manual — les réponses restent "en attente" jusqu'à la résolution en
+    /// lot (automatique à la fermeture de la fenêtre, ou manuelle via un endpoint dédié).
+    /// </summary>
+    bool DefersScoringUntilWindowClose(string configJson) => false;
+
+    /// <summary>Manuel ("Manual") ou automatique ("Auto") : qui déclenche la résolution en lot une fois la
+    /// fenêtre fermée. Sans effet si DefersScoringUntilWindowClose est faux.</summary>
+    bool ShouldAutoResolveDeferredScoring(string configJson) => true;
+
+    /// <summary>Valeur numérique cible pour une feature d'estimation (ex: closest-guess). Null pour toute
+    /// feature qui n'a pas de notion de valeur numérique à deviner.</summary>
+    double? GetNumericTarget(string payloadJson) => null;
 }

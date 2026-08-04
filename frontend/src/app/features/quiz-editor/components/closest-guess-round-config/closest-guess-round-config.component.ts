@@ -1,30 +1,20 @@
 import { Component, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-interface QaRoundConfig {
+interface ClosestGuessRoundConfig {
   validationMode: 'Auto' | 'Manual';
-  autoAdvance: boolean;
   answerTimeSeconds: number;
   points: number;
-  buzzerMode: boolean;
-  allowRetry: boolean;
-  buzzerRetryCooldownSeconds: number;
-  retryCooldownSeconds: number;
   rankBasedScoring: boolean;
   rankMaxPoints: number;
   rankPointsDecrement: number;
 }
 
-function defaultConfig(): QaRoundConfig {
+function defaultConfig(): ClosestGuessRoundConfig {
   return {
     validationMode: 'Auto',
-    autoAdvance: false,
-    answerTimeSeconds: 20,
+    answerTimeSeconds: 30,
     points: 100,
-    buzzerMode: false,
-    allowRetry: false,
-    buzzerRetryCooldownSeconds: 0,
-    retryCooldownSeconds: 0,
     rankBasedScoring: false,
     rankMaxPoints: 100,
     rankPointsDecrement: 10
@@ -32,22 +22,22 @@ function defaultConfig(): QaRoundConfig {
 }
 
 @Component({
-  selector: 'app-qa-round-config',
+  selector: 'app-closest-guess-round-config',
   imports: [FormsModule],
-  templateUrl: './qa-round-config.component.html',
-  styleUrl: './qa-round-config.component.scss'
+  templateUrl: './closest-guess-round-config.component.html',
+  styleUrl: './closest-guess-round-config.component.scss'
 })
-export class QaRoundConfigComponent {
+export class ClosestGuessRoundConfigComponent {
   readonly configJson = input.required<string>();
   readonly configJsonChange = output<string>();
 
-  protected readonly config = signal<QaRoundConfig>(defaultConfig());
+  protected readonly config = signal<ClosestGuessRoundConfig>(defaultConfig());
 
   constructor() {
     effect(() => this.config.set(this.parse(this.configJson())));
   }
 
-  private parse(json: string): QaRoundConfig {
+  private parse(json: string): ClosestGuessRoundConfig {
     try {
       return { ...defaultConfig(), ...JSON.parse(json) };
     } catch {
@@ -64,11 +54,6 @@ export class QaRoundConfigComponent {
     this.emit();
   }
 
-  protected onAutoAdvanceChange(value: boolean): void {
-    this.config.update((c) => ({ ...c, autoAdvance: value }));
-    this.emit();
-  }
-
   protected onAnswerTimeChange(value: number): void {
     this.config.update((c) => ({ ...c, answerTimeSeconds: value }));
     this.emit();
@@ -76,26 +61,6 @@ export class QaRoundConfigComponent {
 
   protected onPointsChange(value: number): void {
     this.config.update((c) => ({ ...c, points: value }));
-    this.emit();
-  }
-
-  protected onBuzzerModeChange(value: boolean): void {
-    this.config.update((c) => ({ ...c, buzzerMode: value }));
-    this.emit();
-  }
-
-  protected onAllowRetryChange(value: boolean): void {
-    this.config.update((c) => ({ ...c, allowRetry: value }));
-    this.emit();
-  }
-
-  protected onBuzzerRetryCooldownChange(value: number): void {
-    this.config.update((c) => ({ ...c, buzzerRetryCooldownSeconds: value }));
-    this.emit();
-  }
-
-  protected onRetryCooldownChange(value: number): void {
-    this.config.update((c) => ({ ...c, retryCooldownSeconds: value }));
     this.emit();
   }
 

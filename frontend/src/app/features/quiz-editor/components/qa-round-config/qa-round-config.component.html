@@ -103,4 +103,21 @@
       </p>
     </div>
   }
+
+  @if (!config().buzzerMode && config().allowRetry) {
+    <div class="form-field qa-round-config__retry-delay">
+      <label for="qa-retry-cooldown">Délai avant de pouvoir renvoyer une réponse (s)</label>
+      <input
+        id="qa-retry-cooldown"
+        type="number"
+        min="0"
+        [value]="config().retryCooldownSeconds"
+        (input)="onRetryCooldownChange($any($event.target).valueAsNumber)"
+      />
+      <p class="qa-round-config__hint">
+        0 = nouvelle tentative immédiate après une réponse fausse. Sinon, le joueur doit attendre ce délai
+        (ou que tous les autres joueurs aient répondu) avant de pouvoir retenter sa chance.
+      </p>
+    </div>
+  }
 </div>

@@ -51,12 +51,14 @@ public class ZoomImageEngine : IFeatureEngine
 
     public bool AllowsRetryAfterWrongAnswer(string configJson) => ParseConfig(configJson).AllowRetry;
 
+    public int GetRetryCooldownSeconds(string configJson) => ParseConfig(configJson).RetryCooldownSeconds;
+
     public bool UsesRankBasedScoring(string configJson) => ParseConfig(configJson).RankBasedScoring;
 
     public int PointsForRank(string configJson, int correctAnswerRank)
     {
         var config = ParseConfig(configJson);
-        return Math.Max(0, config.RankMaxPoints - config.RankPointsDecrement * correctAnswerRank);
+        return RankScoring.PointsForRank(config.RankMaxPoints, config.RankPointsDecrement, correctAnswerRank);
     }
 
     public string BuildPublicPayloadJson(string payloadJson)

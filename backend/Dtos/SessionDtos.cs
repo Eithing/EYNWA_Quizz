@@ -27,7 +27,10 @@ public record GameSessionStateDto(
     string? CurrentBuzzHolderPseudo,
     List<PlayerDto> Players,
     List<TeamDto> Teams,
-    List<ThemeBoardEntryDto>? ThemeBoard);
+    List<ThemeBoardEntryDto>? ThemeBoard,
+    /// <summary>Manche "à quoi pense l'autre" : joueur désigné pour répondre en privé à la question courante.</summary>
+    int? CurrentAnswererPlayerId,
+    string? CurrentAnswererPseudo);
 
 public record CurrentQuestionAdminDto(
     int RoundId,
@@ -44,7 +47,10 @@ public record CurrentQuestionAdminDto(
     bool IsBuzzerMode,
     List<string> CorrectFinders,
     double SecondsElapsedTotal,
-    bool IsPaused);
+    bool IsPaused,
+    /// <summary>Vrai pour une feature à résolution différée (closest-guess) quand il reste des réponses en
+    /// attente de classement — le host peut alors déclencher la révélation manuellement.</summary>
+    bool AwaitingDeferredResolution);
 
 /// <summary>Vue GM de toutes les réponses reçues pour la question courante, jugées ou non — permet de voir
 /// passer les réponses même en validation automatique et de corriger un verdict à tout moment.</summary>
@@ -95,6 +101,8 @@ public record ChooseThemeRequest(List<int> PlayerIds, List<int> TeamIds);
 
 /// <summary>SubRoundId null = révèle tous les thèmes du plateau d'un coup.</summary>
 public record RevealThemeRequest(int? SubRoundId);
+
+public record SetPartnerGuessAnswererRequest(int PlayerId);
 
 /// <summary>Aperçu GM d'une manche pas encore démarrée (ex: avant de désigner les participants), pour savoir sur quoi elle porte.</summary>
 public record RoundPreviewDto(string RoundTitle, string FeatureTypeKey, string? FirstQuestionPayloadJson);

@@ -1,0 +1,76 @@
+<div class="closest-guess-round-config">
+  <div class="form-field">
+    <label for="cg-validation-mode">Révélation du classement</label>
+    <select id="cg-validation-mode" [value]="config().validationMode" (change)="onValidationModeChange($any($event.target).value)">
+      <option value="Auto">Automatique, dès la fermeture de la fenêtre de réponse</option>
+      <option value="Manual">Manuelle — l'hôte révèle quand il le souhaite</option>
+    </select>
+  </div>
+
+  <div class="closest-guess-round-config__row">
+    <div class="form-field">
+      <label for="cg-answer-time">Temps de réponse (s)</label>
+      <input
+        id="cg-answer-time"
+        type="number"
+        min="1"
+        [value]="config().answerTimeSeconds"
+        (input)="onAnswerTimeChange($any($event.target).valueAsNumber)"
+      />
+    </div>
+
+    @if (!config().rankBasedScoring) {
+      <div class="form-field">
+        <label for="cg-points">Points pour la meilleure estimation</label>
+        <input
+          id="cg-points"
+          type="number"
+          min="0"
+          [value]="config().points"
+          (input)="onPointsChange($any($event.target).valueAsNumber)"
+        />
+      </div>
+    }
+  </div>
+
+  <label class="closest-guess-round-config__checkbox">
+    <input type="checkbox" [checked]="config().rankBasedScoring" (change)="onRankBasedScoringChange($any($event.target).checked)" />
+    Points dégressifs selon la proximité (le plus proche = max, puis -X par rang) plutôt que "le plus proche seulement"
+  </label>
+
+  @if (config().rankBasedScoring) {
+    <div class="closest-guess-round-config__row">
+      <div class="form-field">
+        <label for="cg-rank-max-points">Points du plus proche</label>
+        <input
+          id="cg-rank-max-points"
+          type="number"
+          min="0"
+          [value]="config().rankMaxPoints"
+          (input)="onRankMaxPointsChange($any($event.target).valueAsNumber)"
+        />
+      </div>
+
+      <div class="form-field">
+        <label for="cg-rank-decrement">Dégressif par rang</label>
+        <input
+          id="cg-rank-decrement"
+          type="number"
+          min="0"
+          [value]="config().rankPointsDecrement"
+          (input)="onRankPointsDecrementChange($any($event.target).valueAsNumber)"
+        />
+      </div>
+    </div>
+  }
+
+  <p class="closest-guess-round-config__hint">
+    Le passage à la question suivante reste toujours manuel sur cette manche (bouton "Question suivante") :
+    le classement et les essais de chacun restent affichés le temps que tu veux avant de continuer.
+  </p>
+
+  <p class="closest-guess-round-config__hint">
+    En mode équipe (activé côté partie en direct), le classement se fait sur la moyenne des estimations de
+    chaque équipe plutôt que sur chaque joueur individuellement.
+  </p>
+</div>

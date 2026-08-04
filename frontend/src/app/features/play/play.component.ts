@@ -6,6 +6,7 @@ import { MediaService } from '../../core/services/media.service';
 import { SessionService } from '../../core/services/session.service';
 import {
   BlindTestPublicPayload,
+  ClosestGuessPublicPayload,
   GameSessionState,
   ImageGuessPublicPayload,
   JoinSessionResponse,
@@ -14,6 +15,7 @@ import {
   SubmitAnswerResponse,
   ZoomPublicPayload
 } from '../../models/session.model';
+type PartnerGuessPublicPayload = QaPublicPayload;
 import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
 import { ZoomViewerComponent } from '../../shared/components/zoom-viewer/zoom-viewer.component';
@@ -80,6 +82,20 @@ export class PlayComponent implements OnInit, OnDestroy {
     const question = this.question();
     return question?.featureTypeKey === 'image-guess' ? JSON.parse(question.publicPayloadJson) : null;
   });
+
+  protected readonly closestGuessPayload = computed<ClosestGuessPublicPayload | null>(() => {
+    const question = this.question();
+    return question?.featureTypeKey === 'closest-guess' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
+  protected readonly partnerGuessPayload = computed<PartnerGuessPublicPayload | null>(() => {
+    const question = this.question();
+    return question?.featureTypeKey === 'partner-guess' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
+  protected readonly isPartnerGuessAnswerer = computed(
+    () => this.state()?.currentAnswererPlayerId === this.playerInfo?.playerId
+  );
 
   protected readonly resolvedImageUrl = computed(() => {
     const payload = this.zoomPayload();

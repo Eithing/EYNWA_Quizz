@@ -51,6 +51,8 @@
       <app-zoom-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
     } @else if (usesQaRoundConfig()) {
       <app-qa-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
+    } @else if (isClosestGuess()) {
+      <app-closest-guess-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
     } @else {
       <div class="form-field">
         <label for="round-config">
@@ -94,6 +96,16 @@
             />
           } @else if (isImageGuess()) {
             <app-image-guess-question-editor
+              [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else if (isClosestGuess()) {
+            <app-closest-guess-question-editor
+              [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else if (isPartnerGuess()) {
+            <app-partner-guess-question-editor
               [payloadJson]="question.payloadJson"
               (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
             />

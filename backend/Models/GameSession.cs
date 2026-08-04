@@ -11,6 +11,12 @@ public enum GameSessionStatus
     AwaitingParticipants,
     /// <summary>Manche à thèmes en cours : les joueurs voient le plateau de thèmes, en attente que le GM en désigne un (ou skip).</summary>
     ChoosingTheme,
+    /// <summary>Manche "à quoi pense l'autre" : en attente que le GM désigne le joueur qui répond en privé
+    /// à la question courante, avant que quiconque tente de deviner sa réponse.</summary>
+    AwaitingAnswerer,
+    /// <summary>Des équipes existent pour cette session : en attente que le GM décide si la manche à venir
+    /// se joue en mode équipe avant que le minuteur ne démarre.</summary>
+    AwaitingTeamMode,
     Finished
 }
 
@@ -53,6 +59,10 @@ public class GameSession
     /// <summary>Manche à thèmes en cours : sous-manche actuellement active (Round.Id d'un enfant de la
     /// manche courante), null tant qu'aucun thème n'a été choisi ou qu'on n'est pas dans une manche à thèmes.</summary>
     public int? CurrentThemeSubRoundId { get; set; }
+
+    /// <summary>Manche "à quoi pense l'autre" : joueur désigné par le GM pour répondre en privé à la
+    /// question courante (peut changer à chaque question). Null tant qu'aucun n'est désigné.</summary>
+    public int? CurrentAnswererPlayerId { get; set; }
 
     public List<Player> Players { get; set; } = [];
     public List<Team> Teams { get; set; } = [];

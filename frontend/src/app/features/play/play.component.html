@@ -31,6 +31,18 @@
           </app-ui-card>
         }
 
+        @if (s.status === 'AwaitingTeamMode') {
+          <app-ui-card>
+            <p class="play__hint">En attente que l'hôte choisisse le mode de jeu (équipe ou solo) pour cette manche…</p>
+          </app-ui-card>
+        }
+
+        @if (s.status === 'AwaitingAnswerer') {
+          <app-ui-card>
+            <p class="play__hint">En attente que l'hôte désigne qui répond à cette question…</p>
+          </app-ui-card>
+        }
+
         @if (s.status === 'ChoosingTheme') {
           <app-ui-card>
             <h3 class="play__scoreboard-title">Choix du thème</h3>
@@ -81,6 +93,14 @@
                 <img class="play__image" [src]="resolvedImageGuessUrl()" alt="Image à deviner" />
               }
 
+              @if (closestGuessPayload(); as cg) {
+                <p class="play__question-text">{{ cg.questionText }}</p>
+              }
+
+              @if (partnerGuessPayload(); as pg) {
+                <p class="play__question-text">{{ pg.questionText }}</p>
+              }
+
               @if (q.isAnswerWindowOpen) {
                 <div class="play__timing">
                   @if (zoomPayload()) {
@@ -95,12 +115,85 @@
               @if (q.correctFinders.length > 0) {
                 <ol class="play__finders">
                   @for (pseudo of q.correctFinders; track pseudo; let i = $index) {
-                    <li>{{ i + 1 }}. {{ pseudo }}</li>
+                    <li><span class="play__finders-rank">{{ i + 1 }}</span>{{ pseudo }}</li>
                   }
                 </ol>
               }
 
-              @if (q.isSpectator) {
+              @if (q.featureTypeKey === 'partner-guess' && isPartnerGuessAnswerer()) {
+                @if (q.hasAnswered) {
+                  <p class="play__answered">Réponse enregistrée en privé. En attente que l'hôte lance la phase de devinette…</p>
+                } @else if (q.isAnswerWindowOpen) {
+                  <form class="play__form" (submit)="$event.preventDefault(); submitAnswer()">
+                    <input
+                      type="text"
+                      placeholder="Ta réponse (privée)…"
+                      autocomplete="off"
+                      [value]="answer()"
+                      (input)="answer.set($any($event.target).value)"
+                    />
+                    <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+                      {{ submitting() ? 'Envoi…' : 'Valider' }}
+                    </button>
+                  </form>
+
+                  @if (error(); as message) {
+                    <p class="play__error">{{ message }}</p>
+                  }
+                } @else {
+                  <p class="play__hint">Temps écoulé.</p>
+                }
+              } @else if (q.featureTypeKey === 'closest-guess') {
+                @if (q.closestGuessEntries; as entries) {
+                  <div class="play__reveal">
+                    @if (q.closestGuessTargetValue !== null) {
+                      <p class="play__reveal-target">Bonne réponse : <strong>{{ q.closestGuessTargetValue }}</strong></p>
+                    } @else {
+                      <p class="play__hint">Temps écoulé — en attente que l'hôte révèle le classement…</p>
+                    }
+                    <ol class="play__reveal-list">
+                      @for (entry of entries; track entry.playerPseudo) {
+                        <li [class.play__reveal-winner]="entry.isCorrect === true">
+                          <span>{{ entry.playerPseudo }}</span>
+                          <span>{{ entry.rawAnswer }}</span>
+                          @if (entry.pointsAwarded !== null) {
+                            <strong>{{ entry.isCorrect ? '🏆 ' : '' }}{{ entry.pointsAwarded }} pts</strong>
+                          }
+                        </li>
+                      }
+                    </ol>
+                  </div>
+                } @else if (q.isSpectator) {
+                  <p class="play__hint play__spectator">
+                    👀 Vous êtes spectateur pour cette manche
+                    @if (participantNames(); as names) {
+                      — c'est au tour de <strong>{{ names }}</strong>.
+                    }
+                  </p>
+                } @else if (q.hasAnswered) {
+                  <p class="play__answered">Estimation envoyée : {{ answer() }} — en attente de la fin du temps…</p>
+                } @else if (q.isAnswerWindowOpen) {
+                  <form class="play__form" (submit)="$event.preventDefault(); submitAnswer()">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Ton estimation…"
+                      autocomplete="off"
+                      [value]="answer()"
+                      (input)="answer.set($any($event.target).value)"
+                    />
+                    <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+                      {{ submitting() ? 'Envoi…' : 'Valider' }}
+                    </button>
+                  </form>
+
+                  @if (error(); as message) {
+                    <p class="play__error">{{ message }}</p>
+                  }
+                } @else {
+                  <p class="play__hint">Temps écoulé — en attente du résultat…</p>
+                }
+              } @else if (q.isSpectator) {
                 <p class="play__hint play__spectator">
                   👀 Vous êtes spectateur pour cette manche
                   @if (participantNames(); as names) {

@@ -41,13 +41,16 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
             .HasForeignKey(q => q.RoundId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Sous-manches (thèmes) : le nettoyage complet passe déjà par le cascade Quiz -> Round (QuizId),
-        // Restrict ici pour éviter un deuxième chemin de cascade sur la même table (auto-référence).
+        // Sous-manches (thèmes) : Cascade ici aussi (en plus du cascade Quiz -> Round via QuizId) : sans ça, supprimer un quiz
+        // contenant une manche à thèmes échoue avec "FOREIGN KEY constraint failed" — SQLite essaie de
+        // supprimer la manche conteneur avant ses sous-manches, bloqué par la contrainte sur ParentRoundId
+        // tant que les lignes enfants existent encore. SQLite (contrairement à SQL Server) n'interdit pas
+        // les chemins de cascade multiples vers une même table.
         modelBuilder.Entity<Round>()
             .HasOne(r => r.Parent)
             .WithMany(r => r.SubRounds)
             .HasForeignKey(r => r.ParentRoundId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<GameSession>()
             .HasIndex(s => s.InviteToken)
