@@ -47,10 +47,13 @@ public class ZoomImageEngine : IFeatureEngine
         // Mode "points personnalisés" : chaque réponse rapporte son montant fixe, la dégressivité du
         // dézoom ne s'applique pas (les deux mécaniques ne se cumulent pas, décision produit). Sinon
         // (Uniform), comportement historique : le palier de zoom courant fixe les points de la seule
-        // réponse attendue.
+        // réponse attendue. Le PointsMode de la question prime sur celui de la manche s'il est renseigné
+        // (surcharge par question, voir ZoomQuestionPayload.PointsMode).
+        var effectivePointsMode = payload.PointsMode ?? config.PointsMode;
+
         int EffectivePoints(ExpectedAnswer expected)
         {
-            if (config.PointsMode == "PerAnswer")
+            if (effectivePointsMode == "PerAnswer")
             {
                 return expected.Points ?? 0;
             }
@@ -85,10 +88,12 @@ public class ZoomImageEngine : IFeatureEngine
         var config = ParseConfig(configJson);
         var expectedAnswers = payload.ExpectedAnswersOrLegacy();
 
-        // Le barème par réponse n'a de sens à afficher que si PointsMode == "PerAnswer" : en Uniform,
-        // les points dépendent du palier de zoom courant (déjà affiché ailleurs via currentPoints), pas
-        // d'un montant fixe par réponse — rien de statique à montrer ici dans ce cas.
-        List<int>? expectedAnswerPoints = config.PointsMode == "PerAnswer" && expectedAnswers.Count > 0
+        // Le barème par réponse n'a de sens à afficher que si le mode effectif (surcharge de la question,
+        // sinon celui de la manche) est "PerAnswer" : en Uniform, les points dépendent du palier de zoom
+        // courant (déjà affiché ailleurs via currentPoints), pas d'un montant fixe par réponse — rien de
+        // statique à montrer ici dans ce cas.
+        var effectivePointsMode = payload.PointsMode ?? config.PointsMode;
+        List<int>? expectedAnswerPoints = effectivePointsMode == "PerAnswer" && expectedAnswers.Count > 0
             ? ExpectedAnswerMatching.BuildPointsArray(expectedAnswers, e => e.Points ?? 0)
             : null;
 

@@ -9,10 +9,12 @@ interface BlindTestQuestionPayload {
   /** Legacy, lu uniquement pour la rétrocompatibilité — voir toExpectedAnswers(). */
   acceptedAnswers: string[];
   expectedAnswers: ExpectedAnswerDraft[];
+  /** Surcharge du mode de points de la manche pour CETTE question. Null = suit le réglage de la manche. */
+  pointsModeOverride: 'Uniform' | 'PerAnswer' | null;
 }
 
 function defaultPayload(): BlindTestQuestionPayload {
-  return { audioUrl: '', acceptedAnswers: [], expectedAnswers: [] };
+  return { audioUrl: '', acceptedAnswers: [], expectedAnswers: [], pointsModeOverride: null };
 }
 
 function toExpectedAnswers(payload: BlindTestQuestionPayload): ExpectedAnswerDraft[] {
@@ -40,7 +42,8 @@ export class BlindTestQuestionEditorComponent {
   protected readonly uploading = signal(false);
   protected readonly uploadError = signal<string | null>(null);
 
-  protected readonly pointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
+  /** Réglage par défaut de la manche (round-config), avant surcharge éventuelle par cette question. */
+  protected readonly roundPointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
     try {
       const parsed = JSON.parse(this.configJson());
       return parsed.pointsMode === 'PerAnswer' ? 'PerAnswer' : 'Uniform';
@@ -48,6 +51,11 @@ export class BlindTestQuestionEditorComponent {
       return 'Uniform';
     }
   });
+
+  /** Mode réellement appliqué à cette question : sa propre surcharge si renseignée, sinon celui de la manche. */
+  protected readonly effectivePointsMode = computed<'Uniform' | 'PerAnswer'>(
+    () => this.payload().pointsModeOverride ?? this.roundPointsMode()
+  );
 
   constructor(protected readonly mediaService: MediaService) {
     effect(() => {
@@ -95,6 +103,11 @@ export class BlindTestQuestionEditorComponent {
 
   protected onExpectedAnswersChange(expectedAnswers: ExpectedAnswerDraft[]): void {
     this.payload.update((p) => ({ ...p, expectedAnswers, acceptedAnswers: [] }));
+    this.emit();
+  }
+
+  protected onPointsModeOverrideChange(value: string): void {
+    this.payload.update((p) => ({ ...p, pointsModeOverride: value === '' ? null : (value as 'Uniform' | 'PerAnswer') }));
     this.emit();
   }
 

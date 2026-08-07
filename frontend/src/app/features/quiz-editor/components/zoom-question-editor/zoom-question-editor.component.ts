@@ -9,10 +9,12 @@ interface ZoomQuestionPayload {
   acceptedAnswers: string[];
   expectedAnswers: ExpectedAnswerDraft[];
   zoomFocusPoint: { x: number; y: number };
+  /** Surcharge du mode de points de la manche pour CETTE question. Null = suit le réglage de la manche. */
+  pointsMode: 'Uniform' | 'PerAnswer' | null;
 }
 
 function defaultPayload(): ZoomQuestionPayload {
-  return { imageUrl: '', acceptedAnswers: [], expectedAnswers: [], zoomFocusPoint: { x: 0.5, y: 0.5 } };
+  return { imageUrl: '', acceptedAnswers: [], expectedAnswers: [], zoomFocusPoint: { x: 0.5, y: 0.5 }, pointsMode: null };
 }
 
 function toExpectedAnswers(payload: ZoomQuestionPayload): ExpectedAnswerDraft[] {
@@ -40,7 +42,8 @@ export class ZoomQuestionEditorComponent {
   protected readonly uploading = signal(false);
   protected readonly uploadError = signal<string | null>(null);
 
-  protected readonly pointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
+  /** Réglage par défaut de la manche (round-config), avant surcharge éventuelle par cette question. */
+  protected readonly roundPointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
     try {
       const parsed = JSON.parse(this.configJson());
       return parsed.pointsMode === 'PerAnswer' ? 'PerAnswer' : 'Uniform';
@@ -48,6 +51,11 @@ export class ZoomQuestionEditorComponent {
       return 'Uniform';
     }
   });
+
+  /** Mode réellement appliqué à cette question : sa propre surcharge si renseignée, sinon celui de la manche. */
+  protected readonly effectivePointsMode = computed<'Uniform' | 'PerAnswer'>(
+    () => this.payload().pointsMode ?? this.roundPointsMode()
+  );
 
   constructor(protected readonly mediaService: MediaService) {
     effect(() => {
@@ -105,6 +113,11 @@ export class ZoomQuestionEditorComponent {
 
   protected onExpectedAnswersChange(expectedAnswers: ExpectedAnswerDraft[]): void {
     this.payload.update((p) => ({ ...p, expectedAnswers, acceptedAnswers: [] }));
+    this.emit();
+  }
+
+  protected onPointsModeOverrideChange(value: string): void {
+    this.payload.update((p) => ({ ...p, pointsMode: value === '' ? null : (value as 'Uniform' | 'PerAnswer') }));
     this.emit();
   }
 

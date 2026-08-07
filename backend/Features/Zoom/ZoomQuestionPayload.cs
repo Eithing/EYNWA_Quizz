@@ -21,6 +21,10 @@ public class ZoomQuestionPayload
 
     public ZoomFocusPoint ZoomFocusPoint { get; set; } = new();
 
+    /// <summary>Surcharge, pour cette question précise, du PointsMode de la manche ("Uniform"|"PerAnswer").
+    /// Null = suit le réglage par défaut de la manche (ZoomRoundConfig.PointsMode).</summary>
+    public string? PointsMode { get; set; }
+
     public List<ExpectedAnswer> ExpectedAnswersOrLegacy() =>
         ExpectedAnswers.Count > 0
             ? ExpectedAnswers

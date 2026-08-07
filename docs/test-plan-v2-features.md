@@ -373,6 +373,27 @@ Development, qui migre automatiquement).
 
 ---
 
+## 17. Mode de points par question (surcharge du réglage de la manche — pas testé manuellement)
+
+Aucun test manuel fait à ce stade. Chaque question (qa-text, zoom-image, blind-test, image-guess, QCM)
+a désormais son propre sélecteur "Points pour cette question" (hérite de la manche / Uniforme /
+Personnalisé), qui surcharge le `PointsMode` de la manche pour cette question précise uniquement.
+Pour qa-text/blind-test/image-guess/QCM, ce sélecteur ne pilote que l'affichage de l'éditeur — le
+scoring backend était déjà piloté par réponse (`ExpectedAnswer.Points`/`QcmOption.Points`), donc rien
+à vérifier côté moteur pour ces 4 features. **zoom-image est le seul cas où le mode change vraiment le
+calcul des points** (dézoom dégressif vs montant fixe par réponse) — à tester en priorité.
+
+- [ ] Round qa-text en mode "Uniforme" par défaut : une question laissée sur "Suivre la manche" se comporte comme avant (barème uniforme) ; une AUTRE question de la même manche basculée sur "Personnalisé" affiche bien le champ points par réponse et applique ces points custom, sans affecter les autres questions de la manche
+- [ ] Round qa-text en mode "Personnalisé" par défaut : une question basculée sur "Uniforme" repasse au barème de la manche pour cette question précise, malgré le réglage par défaut
+- [ ] Même vérification sur blind-test et image-guess
+- [ ] zoom-image, round en "Uniforme" (dézoom) par défaut : une question basculée sur "Personnalisé" ignore la dégressivité du dézoom et applique un montant fixe par réponse (`expectedAnswerPoints` non-null côté joueur pour cette question précise, alors que les autres questions du round n'affichent toujours rien de statique)
+- [ ] zoom-image, round en "Personnalisé" par défaut : une question basculée sur "Uniforme" retrouve la dégressivité normale du dézoom pour cette question précise
+- [ ] QCM : même vérification (une question surchargée en "Personnalisé" affiche/applique les points par option indépendamment du réglage de la manche)
+- [ ] L'étiquette "Suivre la manche (Uniforme)" / "Suivre la manche (Personnalisé)" dans le sélecteur reflète bien le réglage réel de la manche (se met à jour si on change le mode par défaut de la manche après coup)
+- [ ] Une question créée avant ce changement (payload sans le nouveau champ) se comporte comme "Suivre la manche" par défaut — aucune régression sur les quiz existants
+
+---
+
 ## Environnements à couvrir
 
 - [ ] Un passage complet en **local** (`dotnet run` + `ng serve`) avant de considérer que c'est bon

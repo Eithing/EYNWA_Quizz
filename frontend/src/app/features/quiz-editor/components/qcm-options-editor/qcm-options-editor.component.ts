@@ -10,10 +10,6 @@ export interface QcmOptionDraft {
   points: number | null;
 }
 
-interface QcmRoundConfigForPoints {
-  pointsMode?: 'Uniform' | 'PerAnswer';
-}
-
 /// Éditeur des options d'une question "Choix Multiple" : contenu texte + case "bonne réponse" + points
 /// conditionnels (si correcte, en mode "points personnalisés"). Forme volontairement différente de
 /// expected-answers-editor (pas de synonymes, une checkbox de correction à la place).
@@ -25,17 +21,10 @@ interface QcmRoundConfigForPoints {
 })
 export class QcmOptionsEditorComponent {
   readonly options = input.required<QcmOptionDraft[]>();
-  readonly configJson = input<string>('{}');
+  /** Mode déjà résolu par le parent (surcharge de la question, sinon réglage de la manche) — voir
+   * qcm-question-editor.effectivePointsMode. */
+  readonly pointsMode = input<'Uniform' | 'PerAnswer'>('Uniform');
   readonly optionsChange = output<QcmOptionDraft[]>();
-
-  protected readonly pointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
-    try {
-      const parsed = JSON.parse(this.configJson()) as QcmRoundConfigForPoints;
-      return parsed.pointsMode === 'PerAnswer' ? 'PerAnswer' : 'Uniform';
-    } catch {
-      return 'Uniform';
-    }
-  });
 
   protected readonly correctCount = computed(() => this.options().filter((o) => o.isCorrect).length);
 
