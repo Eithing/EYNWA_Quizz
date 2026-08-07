@@ -1,0 +1,17 @@
+.order-list-round-config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-list-round-config__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.order-list-round-config__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}

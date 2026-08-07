@@ -1,0 +1,41 @@
+<div class="order-list-round-config">
+  <div class="order-list-round-config__row">
+    <div class="form-field">
+      <label for="ol-answer-time">Temps de réponse (s)</label>
+      <input
+        id="ol-answer-time"
+        type="number"
+        min="1"
+        [value]="config().answerTimeSeconds"
+        (input)="onAnswerTimeChange($any($event.target).valueAsNumber)"
+      />
+    </div>
+
+    <div class="form-field">
+      <label for="ol-points-per-item">Points par item bien enchaîné</label>
+      <input
+        id="ol-points-per-item"
+        type="number"
+        min="0"
+        [value]="config().pointsPerChainedItem"
+        (input)="onPointsPerChainedItemChange($any($event.target).valueAsNumber)"
+      />
+    </div>
+  </div>
+
+  <p class="order-list-round-config__hint">
+    Le score ne compare pas position par position : il compte le plus long enchaînement d'items déjà dans
+    le bon ordre relatif. Un seul item mal placé (ex: 1-3-4-5-6-2 au lieu de 1-2-3-4-5-6) ne fait perdre
+    des points que pour cet item-là, pas pour toute la liste.
+  </p>
+
+  <p class="order-list-round-config__hint">
+    Le passage à la question suivante reste toujours manuel sur cette manche (bouton "Question suivante") :
+    le classement de chacun (ou de chaque équipe) reste affiché le temps que tu veux avant de continuer.
+  </p>
+
+  <p class="order-list-round-config__hint">
+    Le type de contenu (texte, image ou son) se choisit question par question, pas ici — tu peux donc
+    mélanger dans une même manche une liste à réordonner en texte, puis une en images, etc.
+  </p>
+</div>

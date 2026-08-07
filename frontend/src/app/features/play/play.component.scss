@@ -280,3 +280,60 @@
     background: var(--bg-app);
   }
 }
+
+.play__order-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.play__order-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+  font-size: 0.9rem;
+
+  audio {
+    height: 32px;
+    max-width: 100%;
+  }
+}
+
+.play__order-list-item.cdk-drag-preview {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.play__order-list-item.cdk-drag-placeholder {
+  opacity: 0.3;
+}
+
+.play__order-list.cdk-drop-list-dragging .play__order-list-item:not(.cdk-drag-placeholder) {
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.play__order-list-handle {
+  color: var(--text-muted);
+  cursor: grab;
+  flex-shrink: 0;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.play__order-list-media {
+  max-height: 70px;
+  max-width: 120px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.play__order-list--reveal .play__order-list-item--chained {
+  box-shadow: inset 3px 0 0 var(--success);
+}

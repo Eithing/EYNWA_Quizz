@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using QuizParty.Api.Data;
 using QuizParty.Api.Dtos;
 using QuizParty.Api.Extensions;
+using QuizParty.Api.Features.OrderList;
 using QuizParty.Api.Features.Shared;
 using QuizParty.Api.Hubs;
 using QuizParty.Api.Models;
@@ -18,6 +19,8 @@ namespace QuizParty.Api.Controllers;
 [Route("api/sessions")]
 public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry engineRegistry, IHubContext<GameHub> hub) : ControllerBase
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     // ------------------------------------------------------------------
     // Game Master
     // ------------------------------------------------------------------
@@ -612,12 +615,31 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         // l'autre), pour référence pendant la phase de devinette.
         var adminPayloadJson = await ResolveEffectivePayloadJsonAsync(session, round, question);
 
+        List<OrderListGroupStateDto>? orderListGroups = null;
+        if (round.FeatureTypeKey == "order-list")
+        {
+            var allAnswers = await db.Answers
+                .Where(a => a.SessionId == session.Id && a.QuestionId == question.Id)
+                .ToListAsync();
+
+            orderListGroups = allAnswers
+                .Select(a =>
+                {
+                    var label = a.TeamId is not null
+                        ? session.Teams.FirstOrDefault(t => t.Id == a.TeamId)?.Name ?? "Équipe"
+                        : session.Players.FirstOrDefault(p => p.Id == a.PlayerId)?.Pseudo ?? "Joueur";
+                    var currentOrder = JsonSerializer.Deserialize<List<string>>(a.RawAnswer, JsonOptions) ?? [];
+                    return new OrderListGroupStateDto(label, currentOrder, a.IsCorrect is not null, a.IsCorrect is not null ? a.PointsAwarded : null);
+                })
+                .ToList();
+        }
+
         return Ok(new CurrentQuestionAdminDto(
             round.Id, round.Title, round.FeatureTypeKey,
             question.Id, adminPayloadJson, round.ConfigJson,
             state.CurrentLevel, state.CurrentPoints, state.SecondsRemainingInStep, state.SecondsRemainingTotal, state.IsAnswerWindowOpen,
             engine.IsBuzzerMode(round.ConfigJson), correctFinders, state.SecondsElapsedTotal, session.PausedAt is not null,
-            awaitingDeferredResolution));
+            awaitingDeferredResolution, orderListGroups));
     }
 
     [Authorize]
@@ -964,12 +986,67 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             }
         }
 
+        List<string>? orderListCurrentOrder = null;
+        List<string>? orderListCorrectOrder = null;
+        List<string>? orderListChainItemIds = null;
+        int? orderListPointsAwarded = null;
+        if (round.FeatureTypeKey == "order-list" && player is not null && !isSpectator)
+        {
+            var groupAnswer = await GetOrderListGroupAnswerAsync(session, question.Id, player);
+
+            // Personne du groupe n'a encore de brouillon pour cette question : on en crée un tout de
+            // suite (ordre mélangé côté serveur) plutôt que de laisser chaque client calculer son propre
+            // ordre initial — sans ça, deux coéquipiers qui arrivent en même temps sur la question
+            // verraient chacun un ordre différent tant que personne n'a encore bougé un item.
+            if (groupAnswer is null && state.IsAnswerWindowOpen)
+            {
+                var payload = JsonSerializer.Deserialize<OrderListQuestionPayload>(question.PayloadJson, JsonOptions) ?? new OrderListQuestionPayload();
+                var shuffledIds = payload.Items.Select(it => it.Id).ToList();
+                var random = Random.Shared;
+                for (var i = shuffledIds.Count - 1; i > 0; i--)
+                {
+                    var j = random.Next(i + 1);
+                    (shuffledIds[i], shuffledIds[j]) = (shuffledIds[j], shuffledIds[i]);
+                }
+
+                groupAnswer = new Answer
+                {
+                    SessionId = session.Id,
+                    PlayerId = player.Id,
+                    QuestionId = question.Id,
+                    RawAnswer = JsonSerializer.Serialize(shuffledIds),
+                    IsCorrect = null,
+                    PendingPoints = 0,
+                    PointsAwarded = 0,
+                    TeamId = session.TeamScoringEnabled ? player.TeamId : null,
+                    ValidationMode = AnswerValidationMode.Auto,
+                    SubmittedAt = DateTime.UtcNow
+                };
+                db.Answers.Add(groupAnswer);
+                await db.SaveChangesAsync();
+            }
+
+            if (groupAnswer is not null)
+            {
+                orderListCurrentOrder = JsonSerializer.Deserialize<List<string>>(groupAnswer.RawAnswer, JsonOptions);
+
+                if (groupAnswer.IsCorrect is not null)
+                {
+                    var payload = JsonSerializer.Deserialize<OrderListQuestionPayload>(question.PayloadJson, JsonOptions) ?? new OrderListQuestionPayload();
+                    orderListCorrectOrder = payload.Items.Select(it => it.Id).ToList();
+                    orderListChainItemIds = OrderListEngine.ComputeChainItemIds(question.PayloadJson, groupAnswer.RawAnswer);
+                    orderListPointsAwarded = groupAnswer.PointsAwarded;
+                }
+            }
+        }
+
         return Ok(new PlayerQuestionDto(
             question.Id, round.Title, round.FeatureTypeKey, publicPayloadJson,
             state.CurrentLevel, state.SecondsRemainingInStep, state.SecondsRemainingTotal, state.IsAnswerWindowOpen, hasAnswered, correctFinders, isSpectator,
             engine.IsBuzzerMode(round.ConfigJson), state.SecondsElapsedTotal, session.PausedAt is not null,
             lastAnswer?.IsCorrect, lastAnswer?.IsCorrect is not null ? lastAnswer.PointsAwarded : null,
-            closestGuessEntries, closestGuessTargetValue));
+            closestGuessEntries, closestGuessTargetValue,
+            orderListCurrentOrder, orderListCorrectOrder, orderListChainItemIds, orderListPointsAwarded));
     }
 
     [AllowAnonymous]
@@ -1161,6 +1238,143 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         return Ok(new SubmitAnswerResponse(evaluation.IsCorrect, pointsAwarded, answer.ValidationMode.ToString()));
     }
 
+    /// <summary>order-list : met à jour le brouillon partagé du groupe (joueur seul, ou toute son équipe en
+    /// mode équipe) après un glisser-déposer terminé — ne note rien, juste la synchronisation en quasi
+    /// temps réel. La finalisation (score) se fait via SubmitOrderFinal ou automatiquement à la fermeture
+    /// de la fenêtre (voir FinalizeIndependentPendingAnswersIfDueAsync).</summary>
+    [AllowAnonymous]
+    [HttpPost("by-token/{token}/order-draft")]
+    public async Task<ActionResult<GameSessionStateDto>> SubmitOrderDraft(string token, OrderDraftRequest request)
+    {
+        var loaded = await LoadSessionByToken(token);
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+
+        var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == request.ConnectionToken);
+        if (player is null)
+        {
+            return Unauthorized();
+        }
+
+        var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
+        if (round is null || question is null || session.CurrentQuestionStartedAt is null || round.FeatureTypeKey != "order-list")
+        {
+            return BadRequest("Aucune question 'ordonne la liste' en cours.");
+        }
+
+        var eligibleIds = await GetEligiblePlayerIdsAsync(session, round);
+        if (!eligibleIds.Contains(player.Id))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, "Vous êtes spectateur pour cette manche.");
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        if (!state.IsAnswerWindowOpen)
+        {
+            return BadRequest("Le temps de réponse est écoulé.");
+        }
+
+        var groupAnswer = await GetOrderListGroupAnswerAsync(session, question.Id, player);
+        if (groupAnswer is null)
+        {
+            db.Answers.Add(new Answer
+            {
+                SessionId = session.Id,
+                PlayerId = player.Id,
+                QuestionId = question.Id,
+                RawAnswer = JsonSerializer.Serialize(request.ItemOrder),
+                IsCorrect = null,
+                PendingPoints = 0,
+                PointsAwarded = 0,
+                TeamId = session.TeamScoringEnabled ? player.TeamId : null,
+                ValidationMode = AnswerValidationMode.Auto,
+                SubmittedAt = DateTime.UtcNow
+            });
+        }
+        else if (groupAnswer.IsCorrect is null)
+        {
+            groupAnswer.RawAnswer = JsonSerializer.Serialize(request.ItemOrder);
+            // Dernier joueur à avoir bougé un item : simple attribution d'affichage, sans incidence sur
+            // le score (qui passe par TeamId en mode équipe, jamais par ce PlayerId-ci).
+            groupAnswer.PlayerId = player.Id;
+            groupAnswer.SubmittedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            return Conflict("Ce classement a déjà été validé.");
+        }
+
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
+    /// <summary>order-list : finalise (note) le brouillon en cours du groupe du joueur — clic explicite
+    /// "Valider mon classement". Si le temps s'écoule avant que quiconque du groupe ne clique, le même
+    /// résultat est obtenu automatiquement (voir FinalizeIndependentPendingAnswersIfDueAsync).</summary>
+    [AllowAnonymous]
+    [HttpPost("by-token/{token}/order-submit")]
+    public async Task<ActionResult<OrderSubmitResponse>> SubmitOrderFinal(string token, OrderSubmitRequest request)
+    {
+        var loaded = await LoadSessionByToken(token);
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+
+        var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == request.ConnectionToken);
+        if (player is null)
+        {
+            return Unauthorized();
+        }
+
+        var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
+        if (round is null || question is null || session.CurrentQuestionStartedAt is null || round.FeatureTypeKey != "order-list")
+        {
+            return BadRequest("Aucune question 'ordonne la liste' en cours.");
+        }
+
+        var eligibleIds = await GetEligiblePlayerIdsAsync(session, round);
+        if (!eligibleIds.Contains(player.Id))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, "Vous êtes spectateur pour cette manche.");
+        }
+
+        var groupAnswer = await GetOrderListGroupAnswerAsync(session, question.Id, player);
+        if (groupAnswer is null)
+        {
+            return BadRequest("Aucun classement en cours à valider.");
+        }
+        if (groupAnswer.IsCorrect is not null)
+        {
+            return Conflict("Ce classement a déjà été validé.");
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var evaluation = engine.Evaluate(round.ConfigJson, question.PayloadJson, groupAnswer.RawAnswer, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        groupAnswer.IsCorrect = evaluation.IsCorrect;
+        groupAnswer.PointsAwarded = evaluation.PointsAwarded;
+        groupAnswer.ValidatedByGmAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+
+        var playerDto = await BuildPlayerDto(player.Id, session.Id, player.Pseudo);
+        await hub.Clients.Group(session.InviteToken).SendAsync("ScoreUpdated", playerDto);
+        await BroadcastState(session, quiz);
+
+        var chainItemIds = OrderListEngine.ComputeChainItemIds(question.PayloadJson, groupAnswer.RawAnswer);
+
+        return Ok(new OrderSubmitResponse(groupAnswer.PointsAwarded, chainItemIds));
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
@@ -1238,6 +1452,11 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         // la fenêtre fermée. Doit tourner AVANT le calcul de allAnswered ci-dessous, sinon on avancerait à
         // la question suivante sans jamais avoir noté les estimations en attente.
         dirty |= await ResolveDeferredScoringIfDueAsync(session, round, question, engine);
+
+        // Feature à finalisation indépendante (order-list) : chaque brouillon en attente se note pour
+        // son propre compte dès la fermeture de la fenêtre, sans attendre un classement collectif —
+        // permet au joueur de voir son résultat même s'il n'a jamais cliqué "Valider".
+        dirty |= await FinalizeIndependentPendingAnswersIfDueAsync(session, round, question, engine);
 
         var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
         var allAnswered = await AllPlayersAnsweredCorrectly(session, round, question);
@@ -1556,6 +1775,53 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         }
     }
 
+    /// <summary>Déclenche la finalisation indépendante (order-list) dès que la fenêtre de réponse est
+    /// fermée et qu'il reste des brouillons en attente — contrairement à
+    /// ResolveDeferredScoringIfDueAsync, aucun classement collectif n'est nécessaire : chaque brouillon
+    /// se note pour son propre compte via engine.Evaluate().</summary>
+    private async Task<bool> FinalizeIndependentPendingAnswersIfDueAsync(GameSession session, Round round, Question question, IFeatureEngine engine)
+    {
+        if (!engine.FinalizesPendingAnswersOnAdvance(round.ConfigJson))
+        {
+            return false;
+        }
+
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
+        if (state.IsAnswerWindowOpen)
+        {
+            return false;
+        }
+
+        var pending = await db.Answers.Where(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.IsCorrect == null).ToListAsync();
+        if (pending.Count == 0)
+        {
+            return false;
+        }
+
+        await FinalizeIndependentPendingAnswersAsync(session, round, question, engine, pending);
+        return true;
+    }
+
+    /// <summary>Note chaque brouillon en attente indépendamment des autres via engine.Evaluate() — utilisé
+    /// à la fermeture de fenêtre (poll, voir ci-dessus) et systématiquement avant de quitter une question
+    /// (AdvanceToNextQuestionAsync), en filet de sécurité pour le cas où le GM cliquerait "Suivant" avant
+    /// qu'aucun poll n'ait eu l'occasion de résoudre les brouillons restants.</summary>
+    private async Task FinalizeIndependentPendingAnswersAsync(GameSession session, Round round, Question question, IFeatureEngine engine, List<Answer>? pendingAnswers = null)
+    {
+        pendingAnswers ??= await db.Answers.Where(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.IsCorrect == null).ToListAsync();
+
+        foreach (var answer in pendingAnswers)
+        {
+            var evaluation = engine.Evaluate(round.ConfigJson, question.PayloadJson, answer.RawAnswer, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
+            answer.IsCorrect = evaluation.IsCorrect;
+            // Contrairement à un simple qa-text, evaluation.PointsAwarded peut être non-nul même si
+            // IsCorrect est faux (order-list : crédit partiel selon la chaîne bien enchaînée) — on
+            // n'écrase donc jamais ici, la valeur renvoyée par l'engine est déjà la bonne.
+            answer.PointsAwarded = evaluation.PointsAwarded;
+            answer.ValidatedByGmAt = DateTime.UtcNow;
+        }
+    }
+
     private async Task<bool> FastForwardIfAllPlayersAnswered(GameSession session, Round round, Question question, IFeatureEngine engine)
     {
         // Le temps est gelé pour une revue GM en cours (validation manuelle ou buzzer) : ne pas
@@ -1693,6 +1959,26 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             .Select(a => a.Player!.Pseudo)
             .ToListAsync();
 
+    /// <summary>order-list uniquement : la ligne Answer (brouillon ou déjà finalisée) partagée par le
+    /// groupe du joueur pour cette question — toute l'équipe si le mode équipe est actif et que le joueur
+    /// en a une, sinon le joueur seul. Dernière ligne par SubmittedAt au cas où (ne devrait normalement
+    /// jamais y en avoir plus d'une par groupe/question, la logique d'écriture met toujours à jour la
+    /// ligne existante plutôt que d'en insérer une nouvelle).</summary>
+    private async Task<Answer?> GetOrderListGroupAnswerAsync(GameSession session, int questionId, Player player)
+    {
+        var groupTeamId = session.TeamScoringEnabled ? player.TeamId : null;
+
+        return groupTeamId is not null
+            ? await db.Answers
+                .Where(a => a.SessionId == session.Id && a.QuestionId == questionId && a.TeamId == groupTeamId)
+                .OrderByDescending(a => a.SubmittedAt)
+                .FirstOrDefaultAsync()
+            : await db.Answers
+                .Where(a => a.SessionId == session.Id && a.QuestionId == questionId && a.PlayerId == player.Id && a.TeamId == null)
+                .OrderByDescending(a => a.SubmittedAt)
+                .FirstOrDefaultAsync();
+    }
+
     private static List<Round> TopLevelRounds(Quiz quiz) =>
         quiz.Rounds.Where(r => r.ParentRoundId == null).OrderBy(r => r.Order).ToList();
 
@@ -1734,6 +2020,20 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
     private async Task AdvanceToNextQuestionAsync(Quiz quiz, GameSession session, bool crossRoundBoundary)
     {
+        // Filet de sécurité pour une feature à finalisation indépendante (order-list) : si le GM clique
+        // "Suivant" avant qu'aucun poll n'ait eu l'occasion de résoudre les brouillons restants (voir
+        // FinalizeIndependentPendingAnswersIfDueAsync, déclenché normalement depuis CheckAutoAdvance), on
+        // ne quitte jamais la question en laissant des réponses définitivement bloquées à IsCorrect==null.
+        var (leavingRound, leavingQuestion) = GetCurrentRoundAndQuestion(quiz, session);
+        if (leavingRound is not null && leavingQuestion is not null)
+        {
+            var leavingEngine = engineRegistry.Get(leavingRound.FeatureTypeKey);
+            if (leavingEngine.FinalizesPendingAnswersOnAdvance(leavingRound.ConfigJson))
+            {
+                await FinalizeIndependentPendingAnswersAsync(session, leavingRound, leavingQuestion, leavingEngine);
+            }
+        }
+
         var rounds = TopLevelRounds(quiz);
 
         // Sous-manche (thème) active : sa propre liste de questions gouverne l'avancement, pas celle de

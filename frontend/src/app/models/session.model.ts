@@ -78,6 +78,15 @@ export interface CurrentQuestionAdmin {
   isPaused: boolean;
   /** Vrai pour closest-guess quand il reste des estimations en attente de classement. */
   awaitingDeferredResolution: boolean;
+  /** order-list uniquement : l'état de chaque groupe (joueur solo ou équipe) en train de jouer cette question. */
+  orderListGroups: OrderListGroupState[] | null;
+}
+
+export interface OrderListGroupState {
+  groupLabel: string;
+  currentOrder: string[];
+  isResolved: boolean;
+  pointsAwarded: number | null;
 }
 
 export interface AnswerFeedItem {
@@ -102,6 +111,11 @@ export interface SubmitAnswerResponse {
   isCorrect: boolean | null;
   pointsAwarded: number;
   validationMode: 'Auto' | 'Manual';
+}
+
+export interface OrderSubmitResponse {
+  pointsAwarded: number;
+  chainItemIds: string[];
 }
 
 export interface PlayerQuestion {
@@ -129,6 +143,15 @@ export interface PlayerQuestion {
   closestGuessEntries: ClosestGuessEntry[] | null;
   /** closest-guess uniquement : la vraie valeur, révélée seulement une fois le classement résolu. */
   closestGuessTargetValue: number | null;
+  /** order-list uniquement : ordre courant des IDs d'items du groupe du joueur (lui seul, ou toute son
+   * équipe si le mode équipe est actif) — mis à jour en quasi temps réel à chaque glisser-déposer. */
+  orderListCurrentOrder: string[] | null;
+  /** order-list uniquement : l'ordre correct, révélé seulement une fois le brouillon finalisé. */
+  orderListCorrectOrder: string[] | null;
+  /** order-list uniquement : IDs des items qui appartenaient à la plus longue chaîne bien enchaînée. */
+  orderListChainItemIds: string[] | null;
+  /** order-list uniquement : points obtenus par le groupe sur cette question, une fois finalisé. */
+  orderListPointsAwarded: number | null;
 }
 
 export interface ClosestGuessEntry {
@@ -165,4 +188,15 @@ export interface ImageGuessPublicPayload {
 
 export interface ClosestGuessPublicPayload {
   questionText: string;
+}
+
+export interface OrderListItem {
+  id: string;
+  content: string;
+}
+
+export interface OrderListPublicPayload {
+  questionText: string;
+  contentType: 'Text' | 'Image' | 'Audio';
+  items: OrderListItem[];
 }

@@ -74,4 +74,13 @@ public interface IFeatureEngine
     /// <summary>Valeur numérique cible pour une feature d'estimation (ex: closest-guess). Null pour toute
     /// feature qui n'a pas de notion de valeur numérique à deviner.</summary>
     double? GetNumericTarget(string payloadJson) => null;
+
+    /// <summary>
+    /// Vrai pour une feature dont chaque réponse en attente (IsCorrect == null) doit être finalisée
+    /// indépendamment des autres dès qu'on quitte la question (fermeture de fenêtre ou clic GM sur
+    /// "Suivant"), sans attendre ni classer par rapport aux autres joueurs (contrairement à
+    /// DefersScoringUntilWindowClose, pensé pour un classement en lot type closest-guess). Faux par
+    /// défaut. Voir SessionsController.FinalizeIndependentPendingAnswersAsync.
+    /// </summary>
+    bool FinalizesPendingAnswersOnAdvance(string configJson) => false;
 }

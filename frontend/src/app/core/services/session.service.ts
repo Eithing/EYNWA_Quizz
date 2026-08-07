@@ -8,6 +8,7 @@ import {
   JoinSessionResponse,
   Player,
   PlayerQuestion,
+  OrderSubmitResponse,
   RoundPreview,
   SubmitAnswerResponse,
   Team
@@ -147,5 +148,16 @@ export class SessionService {
 
   buzz(token: string, connectionToken: string) {
     return this.http.post<GameSessionState>(`${this.baseUrl}/by-token/${token}/buzz`, { connectionToken });
+  }
+
+  submitOrderDraft(token: string, connectionToken: string, itemOrder: string[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/by-token/${token}/order-draft`, {
+      connectionToken,
+      itemOrder
+    });
+  }
+
+  submitOrderFinal(token: string, connectionToken: string) {
+    return this.http.post<OrderSubmitResponse>(`${this.baseUrl}/by-token/${token}/order-submit`, { connectionToken });
   }
 }

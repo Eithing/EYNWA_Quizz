@@ -435,3 +435,55 @@
     font-size: 0.75rem;
   }
 }
+
+.host-live__order-list-block {
+  margin-bottom: 14px;
+}
+
+.host-live__order-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  li {
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    font-size: 0.8rem;
+  }
+
+  img {
+    max-height: 50px;
+    max-width: 80px;
+    object-fit: contain;
+    display: block;
+  }
+
+  audio {
+    height: 28px;
+    max-width: 160px;
+  }
+}
+
+.host-live__order-list-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.host-live__order-list-group {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+}
+
+.host-live__order-list-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}

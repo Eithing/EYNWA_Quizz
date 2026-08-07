@@ -231,6 +231,46 @@ Le moteur des manches (`qa-text`, `zoom-image`, `blind-test`) a été touché in
 
 ---
 
+## 13. Manche "Ordonne la liste" (nouvelle feature — pas testée manuellement, à valider en priorité)
+
+Cette manche n'a été vérifiée que par les builds (`dotnet build` + `npx ng build`, tous deux propres) et un
+démarrage réussi des deux serveurs — **aucun test de glisser-déposer réel n'a été fait**, à couvrir
+entièrement ici avant de considérer la feature fiable.
+
+### 13.1 Création dans l'éditeur
+- [ ] `+ Ajouter une manche` → "Ordonne la liste" apparaît dans la liste des types
+- [ ] Config de manche : choisir le type de contenu (Texte / Image / Son), temps de réponse, points par item bien enchaîné
+- [ ] Créer une question avec 5-6 items en **Texte** : glisser-déposer dans l'éditeur pour fixer l'ordre correct, ajouter/retirer des items
+- [ ] Refaire avec le type **Image** : upload par item, aperçu affiché, glisser-déposer fonctionne toujours pour réordonner
+- [ ] Refaire avec le type **Son** : upload par item, lecteur `<audio>` avec contrôles (pas de lecture auto simultanée de tous les items, contrairement au lecteur blind-test)
+- [ ] Sauvegarder le quiz, recharger la page → l'ordre correct et le contenu de chaque item sont conservés
+
+### 13.2 Partie solo (sans équipe)
+- [ ] Lancer la session, rejoindre avec 2 joueurs solo (pas d'équipe créée)
+- [ ] Chaque joueur voit un ordre mélangé **différent** au départ (shuffle indépendant par joueur)
+- [ ] Glisser-déposer fonctionne au clavier/souris (desktop) et **au tactile** (tester sur un vrai téléphone ou le mode responsive des devtools — `@angular/cdk/drag-drop` doit gérer ça nativement)
+- [ ] Reproduire l'exemple de référence : ordre correct 1-2-3-4-5-6, un joueur soumet 1-3-4-5-6-2 → doit obtenir les points de 5 items (chaîne 1-3-4-5-6), pas juste 1
+- [ ] Cliquer "Valider mon classement" → le score s'affiche, la comparaison ordre soumis / ordre correct apparaît, les items bien enchaînés sont surlignés en vert
+- [ ] Laisser le temps s'écouler **sans** cliquer "Valider" → le classement se finalise quand même automatiquement (avec le dernier ordre glissé, ou l'ordre initial si jamais touché)
+- [ ] Le bouton "Suivant" reste toujours manuel après la révélation (pas d'avance automatique, comme closest-guess)
+
+### 13.3 Partie en équipe (sync temps réel)
+- [ ] Créer une équipe de 2 joueurs, activer le mode équipe sur cette manche
+- [ ] Les deux fenêtres affichent le **même** ordre mélangé au départ (pas un ordre différent par joueur)
+- [ ] Joueur A glisse un item → après le drop, joueur B voit le nouvel ordre se synchroniser (quasi temps réel, pas continu pendant le drag lui-même)
+- [ ] Le score final est bien attribué à l'**équipe** (pot commun), pas au joueur qui a cliqué "Valider"
+- [ ] Un joueur non sélectionné / spectateur ne peut pas glisser-déposer (message spectateur affiché)
+
+### 13.4 Vue GM (host-live)
+- [ ] "Question en cours" affiche l'ordre correct (le GM le voit toujours, comme pour les réponses acceptées des autres features)
+- [ ] Un bloc par groupe (joueur solo ou équipe) en train de jouer, avec son ordre courant qui se met à jour en direct
+- [ ] Une fois un groupe résolu, ses points s'affichent dans son bloc
+
+### 13.5 Non-régression
+- [ ] Les autres types de manches (qa-text, zoom-image, closest-guess, etc.) n'ont pas été affectés par les changements génériques (`IFeatureEngine.FinalizesPendingAnswersOnAdvance`, nouveau champ `AdvanceToNextQuestionAsync`) — repasser rapidement sur une manche qa-text classique pour confirmer qu'elle avance toujours normalement (Next, auto-advance, fin de partie)
+
+---
+
 ## Environnements à couvrir
 
 - [ ] Un passage complet en **local** (`dotnet run` + `ng serve`) avant de considérer que c'est bon

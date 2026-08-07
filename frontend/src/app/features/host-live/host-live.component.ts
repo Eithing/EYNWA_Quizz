@@ -158,6 +158,43 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     }
   });
 
+  protected readonly currentOrderListPayload = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'order-list') {
+      return null;
+    }
+    try {
+      // Vue GM : question.payloadJson est le payload brut (non assaini), ses items sont donc déjà
+      // dans l'ordre CORRECT défini par le GM à l'édition.
+      return JSON.parse(question.payloadJson) as {
+        questionText: string;
+        contentType: 'Text' | 'Image' | 'Audio';
+        items: { id: string; content: string }[];
+      };
+    } catch {
+      return null;
+    }
+  });
+
+  protected readonly currentOrderListContentType = computed<'Text' | 'Image' | 'Audio'>(
+    () => this.currentOrderListPayload()?.contentType ?? 'Text'
+  );
+
+  /** Mêmes groupes que question.orderListGroups, mais avec le contenu de chaque item résolu (au lieu de
+   * juste des IDs) pour l'affichage. */
+  protected readonly currentOrderListGroupsDisplay = computed(() => {
+    const payload = this.currentOrderListPayload();
+    const question = this.currentQuestion();
+    if (!payload || !question?.orderListGroups) {
+      return [];
+    }
+    const byId = new Map(payload.items.map((it) => [it.id, it]));
+    return question.orderListGroups.map((g) => ({
+      ...g,
+      items: g.currentOrder.map((id) => byId.get(id)).filter((it): it is { id: string; content: string } => !!it)
+    }));
+  });
+
   protected readonly anyThemeHidden = computed(() => (this.state()?.themeBoard ?? []).some((t) => !t.isRevealed));
 
   protected readonly allThemesResolved = computed(() => {
@@ -320,6 +357,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected onSetRoundTeamMode(enabled: boolean): void {
     this.sessionService.setRoundTeamMode(this.sessionId, enabled).subscribe((state) => this.applyState(state));
+  }
+
+  protected resolveOrderListMediaUrl(url: string): string {
+    return this.mediaService.resolveUrl(url);
   }
 
   protected resolveBuzz(isCorrect: boolean): void {

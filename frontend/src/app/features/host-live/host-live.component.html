@@ -276,6 +276,57 @@
             <p class="host-live__qa-hint">Valeur exacte : {{ closestGuess.targetValue }}</p>
           }
 
+          @if (currentOrderListPayload(); as orderList) {
+            <p class="host-live__qa-text">{{ orderList.questionText }}</p>
+
+            <div class="host-live__order-list-block">
+              <p class="host-live__qa-hint">Ordre correct :</p>
+              <ol class="host-live__order-list-items">
+                @for (item of orderList.items; track item.id) {
+                  <li>
+                    @if (currentOrderListContentType() === 'Image') {
+                      <img [src]="resolveOrderListMediaUrl(item.content)" alt="" />
+                    } @else if (currentOrderListContentType() === 'Audio') {
+                      <audio controls [src]="resolveOrderListMediaUrl(item.content)"></audio>
+                    } @else {
+                      <span>{{ item.content }}</span>
+                    }
+                  </li>
+                }
+              </ol>
+            </div>
+
+            <div class="host-live__order-list-groups">
+              @for (group of currentOrderListGroupsDisplay(); track group.groupLabel) {
+                <div class="host-live__order-list-group">
+                  <div class="host-live__order-list-group-header">
+                    <strong>{{ group.groupLabel }}</strong>
+                    @if (group.isResolved) {
+                      <span>{{ group.pointsAwarded }} pts</span>
+                    } @else {
+                      <span class="host-live__hint">en cours…</span>
+                    }
+                  </div>
+                  <ol class="host-live__order-list-items">
+                    @for (item of group.items; track item.id) {
+                      <li>
+                        @if (currentOrderListContentType() === 'Image') {
+                          <img [src]="resolveOrderListMediaUrl(item.content)" alt="" />
+                        } @else if (currentOrderListContentType() === 'Audio') {
+                          <audio controls [src]="resolveOrderListMediaUrl(item.content)"></audio>
+                        } @else {
+                          <span>{{ item.content }}</span>
+                        }
+                      </li>
+                    }
+                  </ol>
+                </div>
+              } @empty {
+                <p class="host-live__hint">Personne n'a encore commencé à réordonner.</p>
+              }
+            </div>
+          }
+
           @if (currentPartnerGuessPayload(); as partnerGuess) {
             <p class="host-live__qa-text">{{ partnerGuess.questionText }}</p>
             @if (isPartnerGuessPhase1()) {

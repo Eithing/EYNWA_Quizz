@@ -193,6 +193,84 @@
                 } @else {
                   <p class="play__hint">Temps écoulé — en attente du résultat…</p>
                 }
+              } @else if (q.featureTypeKey === 'order-list') {
+                @if (q.orderListCorrectOrder; as correctOrder) {
+                  <div class="play__reveal">
+                    @if (q.orderListPointsAwarded !== null) {
+                      <p class="play__reveal-target">Score : <strong>{{ q.orderListPointsAwarded }} pts</strong></p>
+                    }
+
+                    <p class="play__hint">Ton classement (en vert : déjà dans le bon ordre relatif) :</p>
+                    <ol class="play__order-list play__order-list--reveal">
+                      @for (item of orderListCurrentItems(); track item.id) {
+                        <li [class.play__order-list-item--chained]="(q.orderListChainItemIds ?? []).includes(item.id)">
+                          @if (orderListPayload()?.contentType === 'Image') {
+                            <img class="play__order-list-media" [src]="resolveOrderListMediaUrl(item.content)" alt="" />
+                          } @else if (orderListPayload()?.contentType === 'Audio') {
+                            <audio controls [src]="resolveOrderListMediaUrl(item.content)"></audio>
+                          } @else {
+                            <span>{{ item.content }}</span>
+                          }
+                        </li>
+                      }
+                    </ol>
+
+                    <p class="play__hint">Ordre correct :</p>
+                    <ol class="play__order-list play__order-list--reveal">
+                      @for (item of orderListCorrectItems(); track item.id) {
+                        <li>
+                          @if (orderListPayload()?.contentType === 'Image') {
+                            <img class="play__order-list-media" [src]="resolveOrderListMediaUrl(item.content)" alt="" />
+                          } @else if (orderListPayload()?.contentType === 'Audio') {
+                            <audio controls [src]="resolveOrderListMediaUrl(item.content)"></audio>
+                          } @else {
+                            <span>{{ item.content }}</span>
+                          }
+                        </li>
+                      }
+                    </ol>
+                  </div>
+                } @else if (q.isSpectator) {
+                  <p class="play__hint play__spectator">
+                    👀 Vous êtes spectateur pour cette manche
+                    @if (participantNames(); as names) {
+                      — c'est au tour de <strong>{{ names }}</strong>.
+                    }
+                  </p>
+                } @else {
+                  <ol class="play__order-list" cdkDropList (cdkDropListDropped)="onOrderListDrop($event)">
+                    @for (item of orderListCurrentItems(); track item.id) {
+                      <li
+                        class="play__order-list-item"
+                        cdkDrag
+                        [cdkDragDisabled]="!q.isAnswerWindowOpen"
+                        (cdkDragStarted)="orderListDragging.set(true)"
+                        (cdkDragEnded)="onOrderListDragEnded()"
+                      >
+                        <span class="play__order-list-handle" cdkDragHandle title="Glisser pour réordonner">⠿</span>
+                        @if (orderListPayload()?.contentType === 'Image') {
+                          <img class="play__order-list-media" [src]="resolveOrderListMediaUrl(item.content)" alt="" />
+                        } @else if (orderListPayload()?.contentType === 'Audio') {
+                          <audio controls [src]="resolveOrderListMediaUrl(item.content)"></audio>
+                        } @else {
+                          <span>{{ item.content }}</span>
+                        }
+                      </li>
+                    }
+                  </ol>
+
+                  @if (q.isAnswerWindowOpen) {
+                    <button type="button" class="btn btn-primary" [disabled]="orderListSubmitting()" (click)="submitOrderFinal()">
+                      {{ orderListSubmitting() ? 'Envoi…' : 'Valider mon classement' }}
+                    </button>
+                  } @else {
+                    <p class="play__hint">Temps écoulé — en attente du résultat…</p>
+                  }
+
+                  @if (orderListError(); as message) {
+                    <p class="play__error">{{ message }}</p>
+                  }
+                }
               } @else if (q.isSpectator) {
                 <p class="play__hint play__spectator">
                   👀 Vous êtes spectateur pour cette manche

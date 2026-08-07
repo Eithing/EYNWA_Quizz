@@ -1,0 +1,74 @@
+<div class="order-list-question-editor">
+  <div class="form-field">
+    <label for="ol-question-text">Consigne / question</label>
+    <input
+      id="ol-question-text"
+      type="text"
+      placeholder="Ex : Classe ces jeux du plus récent au plus ancien"
+      [value]="payload().questionText"
+      (input)="onQuestionTextChange($any($event.target).value)"
+    />
+  </div>
+
+  <div class="form-field">
+    <label for="ol-content-type">Type de contenu des items (pour cette question)</label>
+    <select id="ol-content-type" [value]="payload().contentType" (change)="onContentTypeChange($any($event.target).value)">
+      <option value="Text">Texte</option>
+      <option value="Image">Image</option>
+      <option value="Audio">Son</option>
+    </select>
+  </div>
+
+  <div class="form-field">
+    <label>Items, dans l'ordre CORRECT (glisse pour réordonner)</label>
+
+    <ol class="order-list-question-editor__items" cdkDropList (cdkDropListDropped)="onDrop($event)">
+      @for (item of payload().items; track item.id; let i = $index) {
+        <li class="order-list-question-editor__item" cdkDrag>
+          <span class="order-list-question-editor__drag-handle" cdkDragHandle title="Glisser pour réordonner">⠿</span>
+          <span class="order-list-question-editor__index">{{ i + 1 }}</span>
+
+          @if (payload().contentType === 'Text') {
+            <input
+              type="text"
+              class="order-list-question-editor__text-input"
+              placeholder="Contenu de l'item"
+              [value]="item.content"
+              (input)="onItemContentChange(i, $any($event.target).value)"
+            />
+          } @else {
+            <div class="order-list-question-editor__media">
+              @if (item.content) {
+                @if (payload().contentType === 'Image') {
+                  <img class="order-list-question-editor__preview" [src]="resolveMediaUrl(item.content)" alt="" />
+                } @else {
+                  <audio class="order-list-question-editor__audio" controls [src]="resolveMediaUrl(item.content)"></audio>
+                }
+              }
+
+              <label class="order-list-question-editor__upload">
+                <input
+                  type="file"
+                  [accept]="payload().contentType === 'Image' ? 'image/png,image/jpeg,image/webp,image/gif' : 'audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a'"
+                  (change)="onFileSelected(i, $event)"
+                  [disabled]="uploadingIndex() === i"
+                />
+                <span>{{ uploadingIndex() === i ? 'Envoi en cours…' : item.content ? 'Changer' : 'Choisir un fichier' }}</span>
+              </label>
+            </div>
+          }
+
+          <button type="button" class="order-list-question-editor__remove" title="Retirer cet item" (click)="removeItem(i)">✕</button>
+        </li>
+      } @empty {
+        <p class="order-list-question-editor__empty">Aucun item pour l'instant.</p>
+      }
+    </ol>
+
+    @if (uploadError(); as message) {
+      <p class="order-list-question-editor__error">{{ message }}</p>
+    }
+
+    <button type="button" class="btn btn-secondary" (click)="addItem()">+ Ajouter un item</button>
+  </div>
+</div>

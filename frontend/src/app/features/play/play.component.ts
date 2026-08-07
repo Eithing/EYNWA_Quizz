@@ -1,3 +1,4 @@
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -10,6 +11,8 @@ import {
   GameSessionState,
   ImageGuessPublicPayload,
   JoinSessionResponse,
+  OrderListItem,
+  OrderListPublicPayload,
   PlayerQuestion,
   QaPublicPayload,
   SubmitAnswerResponse,
@@ -24,7 +27,7 @@ const POLL_INTERVAL_MS = 800;
 
 @Component({
   selector: 'app-play',
-  imports: [FormsModule, UiCardComponent, ZoomViewerComponent, AudioPlayerComponent],
+  imports: [FormsModule, UiCardComponent, ZoomViewerComponent, AudioPlayerComponent, CdkDropList, CdkDrag, CdkDragHandle],
   templateUrl: './play.component.html',
   styleUrl: './play.component.scss'
 })
@@ -93,6 +96,42 @@ export class PlayComponent implements OnInit, OnDestroy {
     return question?.featureTypeKey === 'partner-guess' ? JSON.parse(question.publicPayloadJson) : null;
   });
 
+  protected readonly orderListPayload = computed<OrderListPublicPayload | null>(() => {
+    const question = this.question();
+    return question?.featureTypeKey === 'order-list' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
+  /** Items dans l'ordre courant du groupe (soi-même, ou toute son équipe en mode équipe), tant que non
+   * résolu — l'ordre vient de question().orderListCurrentOrder (IDs), le contenu de orderListPayload(). */
+  protected readonly orderListCurrentItems = computed<OrderListItem[]>(() => {
+    const q = this.question();
+    const payload = this.orderListPayload();
+    if (!q?.orderListCurrentOrder || !payload) {
+      return [];
+    }
+    const byId = new Map(payload.items.map((it) => [it.id, it]));
+    return q.orderListCurrentOrder.map((id) => byId.get(id)).filter((it): it is OrderListItem => !!it);
+  });
+
+  /** Une fois résolu : ordre correct, dans le même format que orderListCurrentItems. */
+  protected readonly orderListCorrectItems = computed<OrderListItem[]>(() => {
+    const q = this.question();
+    const payload = this.orderListPayload();
+    if (!q?.orderListCorrectOrder || !payload) {
+      return [];
+    }
+    const byId = new Map(payload.items.map((it) => [it.id, it]));
+    return q.orderListCorrectOrder.map((id) => byId.get(id)).filter((it): it is OrderListItem => !!it);
+  });
+
+  protected readonly orderListSubmitting = signal(false);
+  protected readonly orderListError = signal<string | null>(null);
+  /** Vrai pendant un glisser-déposer order-list en cours (entre cdkDragStarted et cdkDragEnded) : le
+   * poll (800ms) et les échos StateChanged de notre propre action arrivent parfois EN PLEIN milieu du
+   * geste — sans ce garde-fou, ils remplacent le tableau lié au drag pendant qu'il bouge encore, ce qui
+   * fait "sauter"/rafraîchir visuellement l'item en cours de déplacement. */
+  protected readonly orderListDragging = signal(false);
+
   protected readonly isPartnerGuessAnswerer = computed(
     () => this.state()?.currentAnswererPlayerId === this.playerInfo?.playerId
   );
@@ -136,6 +175,13 @@ export class PlayComponent implements OnInit, OnDestroy {
 
       await this.signalrService.connect(this.token);
       this.signalrService.onStateChanged((updated) => {
+        // Pendant un glisser-déposer order-list actif, on ignore complètement les mises à jour externes
+        // (poll ET SignalR) : le moindre this.question.set(...)/this.state.set(...) en plein milieu du
+        // geste fait "sauter" l'affichage (CDK re-mesure ses éléments à chaque passage de détection de
+        // changements). On rattrape tout au cdkDragEnded une fois le geste terminé.
+        if (this.orderListDragging()) {
+          return;
+        }
         this.state.set(updated);
         this.answer.set('');
         this.result.set(null);
@@ -151,7 +197,12 @@ export class PlayComponent implements OnInit, OnDestroy {
     // Filet de sécurité indépendant de SignalR : si un message temps réel est manqué (connexion
     // pas encore établie, coupure réseau…), l'écran se remet à jour tout seul au prochain sondage
     // au lieu de rester bloqué tant que le joueur ne rafraîchit pas la page à la main.
-    this.pollHandle = setInterval(() => this.refreshState(), POLL_INTERVAL_MS);
+    // Suspendu pendant un glisser-déposer order-list actif (voir onOrderListDragStarted).
+    this.pollHandle = setInterval(() => {
+      if (!this.orderListDragging()) {
+        this.refreshState();
+      }
+    }, POLL_INTERVAL_MS);
   }
 
   ngOnDestroy(): void {
@@ -205,6 +256,59 @@ export class PlayComponent implements OnInit, OnDestroy {
     });
   }
 
+  protected onOrderListDragEnded(): void {
+    // Ne PAS re-fetcher ici : cdkDropListDropped (juste après) fait sa propre mise à jour optimiste puis
+    // persiste le nouvel ordre — un fetch immédiat ici arriverait avant que ce POST ne soit reçu par le
+    // serveur et réafficherait brièvement l'ANCIEN ordre. Le poll normal (qui reprend puisque
+    // orderListDragging repasse à false) suffit à rattraper un éventuel changement d'un coéquipier.
+    this.orderListDragging.set(false);
+  }
+
+  protected onOrderListDrop(event: CdkDragDrop<OrderListItem[]>): void {
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
+
+    const q = this.question();
+    if (!q?.orderListCurrentOrder) {
+      return;
+    }
+
+    const newOrder = [...q.orderListCurrentOrder];
+    moveItemInArray(newOrder, event.previousIndex, event.currentIndex);
+    // Mise à jour optimiste : l'affichage réagit immédiatement, le prochain poll/StateChanged confirmera
+    // (ou corrigera si un coéquipier a bougé quelque chose entre-temps).
+    this.question.set({ ...q, orderListCurrentOrder: newOrder });
+
+    this.sessionService.submitOrderDraft(this.token, this.playerInfo.connectionToken, newOrder).subscribe({
+      error: () => this.refreshQuestion()
+    });
+  }
+
+  protected submitOrderFinal(): void {
+    if (this.orderListSubmitting()) {
+      return;
+    }
+
+    this.orderListSubmitting.set(true);
+    this.orderListError.set(null);
+
+    this.sessionService.submitOrderFinal(this.token, this.playerInfo.connectionToken).subscribe({
+      next: () => {
+        this.orderListSubmitting.set(false);
+        this.refreshQuestion();
+      },
+      error: () => {
+        this.orderListSubmitting.set(false);
+        this.orderListError.set('Échec de la validation du classement.');
+      }
+    });
+  }
+
+  protected resolveOrderListMediaUrl(url: string): string {
+    return this.mediaService.resolveUrl(url);
+  }
+
   private refreshQuestion(): void {
     const state = this.state();
     if (!state || state.status !== 'Running') {
@@ -221,6 +325,14 @@ export class PlayComponent implements OnInit, OnDestroy {
           this.answer.set('');
           this.result.set(null);
         }
+
+        // Glisser-déposer order-list en cours : on ne laisse pas ce fetch (poll ou écho StateChanged de
+        // notre propre action) remplacer l'ordre affiché pendant que l'utilisateur est encore en train de
+        // le manipuler — voir le commentaire sur orderListDragging.
+        if (this.orderListDragging() && previous?.orderListCurrentOrder && question.featureTypeKey === 'order-list') {
+          question = { ...question, orderListCurrentOrder: previous.orderListCurrentOrder };
+        }
+
         this.question.set(question);
       },
       error: () => this.question.set(null)

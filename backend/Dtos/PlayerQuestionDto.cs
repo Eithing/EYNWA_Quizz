@@ -34,4 +34,17 @@ public record PlayerQuestionDto(
     /// toute autre feature, ou tant que la fenêtre est encore ouverte.</summary>
     List<ClosestGuessEntryDto>? ClosestGuessEntries,
     /// <summary>closest-guess uniquement : la vraie valeur, révélée seulement une fois le classement résolu.</summary>
-    double? ClosestGuessTargetValue);
+    double? ClosestGuessTargetValue,
+    /// <summary>order-list uniquement : ordre courant des IDs d'items du groupe du joueur (lui seul, ou
+    /// toute son équipe si le mode équipe est actif) — mis à jour en temps quasi-réel à chaque
+    /// glisser-déposer d'un membre du groupe. Null tant que spectateur ou hors fenêtre de réponse.</summary>
+    List<string>? OrderListCurrentOrder,
+    /// <summary>order-list uniquement : l'ordre correct, révélé seulement une fois le brouillon du groupe
+    /// finalisé (clic "Valider" ou fermeture de la fenêtre).</summary>
+    List<string>? OrderListCorrectOrder,
+    /// <summary>order-list uniquement : IDs des items de OrderListCurrentOrder qui appartenaient à la plus
+    /// longue chaîne bien enchaînée (voir LongestIncreasingSubsequence) — pour surligner côté client
+    /// lesquels ont compté dans le score. Null tant que non finalisé.</summary>
+    List<string>? OrderListChainItemIds,
+    /// <summary>order-list uniquement : points obtenus par le groupe sur cette question, une fois finalisé.</summary>
+    int? OrderListPointsAwarded);

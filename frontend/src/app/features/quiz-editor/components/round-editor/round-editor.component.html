@@ -53,6 +53,8 @@
       <app-qa-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
     } @else if (isClosestGuess()) {
       <app-closest-guess-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
+    } @else if (isOrderList()) {
+      <app-order-list-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
     } @else {
       <div class="form-field">
         <label for="round-config">
@@ -106,6 +108,11 @@
             />
           } @else if (isPartnerGuess()) {
             <app-partner-guess-question-editor
+              [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else if (isOrderList()) {
+            <app-order-list-question-editor
               [payloadJson]="question.payloadJson"
               (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
             />

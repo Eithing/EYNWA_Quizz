@@ -7,6 +7,8 @@ import { ClosestGuessQuestionEditorComponent } from '../closest-guess-question-e
 import { ClosestGuessRoundConfigComponent } from '../closest-guess-round-config/closest-guess-round-config.component';
 import { FeaturePickerComponent } from '../feature-picker/feature-picker.component';
 import { ImageGuessQuestionEditorComponent } from '../image-guess-question-editor/image-guess-question-editor.component';
+import { OrderListQuestionEditorComponent } from '../order-list-question-editor/order-list-question-editor.component';
+import { OrderListRoundConfigComponent } from '../order-list-round-config/order-list-round-config.component';
 import { PartnerGuessQuestionEditorComponent } from '../partner-guess-question-editor/partner-guess-question-editor.component';
 import { QaQuestionEditorComponent } from '../qa-question-editor/qa-question-editor.component';
 import { QaRoundConfigComponent } from '../qa-round-config/qa-round-config.component';
@@ -26,6 +28,8 @@ import { ZoomRoundConfigComponent } from '../zoom-round-config/zoom-round-config
     ClosestGuessQuestionEditorComponent,
     ClosestGuessRoundConfigComponent,
     PartnerGuessQuestionEditorComponent,
+    OrderListRoundConfigComponent,
+    OrderListQuestionEditorComponent,
     FeaturePickerComponent,
     RoundEditorComponent
   ],
@@ -45,6 +49,7 @@ export class RoundEditorComponent {
   protected readonly isImageGuess = computed(() => this.round().featureTypeKey === 'image-guess');
   protected readonly isClosestGuess = computed(() => this.round().featureTypeKey === 'closest-guess');
   protected readonly isPartnerGuess = computed(() => this.round().featureTypeKey === 'partner-guess');
+  protected readonly isOrderList = computed(() => this.round().featureTypeKey === 'order-list');
   // qa-text, blind-test, image-guess et partner-guess partagent exactement la même configuration de manche.
   protected readonly usesQaRoundConfig = computed(
     () => this.isQaText() || this.isBlindTest() || this.isImageGuess() || this.isPartnerGuess()

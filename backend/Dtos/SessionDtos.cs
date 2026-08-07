@@ -11,6 +11,11 @@ public record TeamDto(int Id, string Name, List<int> PlayerIds, int Score);
 /// <summary>Une case du plateau d'une manche à thèmes. Resolution : "Pending" | "Played" | "Skipped".</summary>
 public record ThemeBoardEntryDto(int SubRoundId, string Title, bool IsRevealed, string Resolution);
 
+/// <summary>order-list, vue GM uniquement : l'état courant d'un groupe (un joueur solo, ou toute une
+/// équipe) pour la question en cours — plusieurs groupes jouent en parallèle, chacun avec son propre
+/// ordre en train d'être réarrangé.</summary>
+public record OrderListGroupStateDto(string GroupLabel, List<string> CurrentOrder, bool IsResolved, int? PointsAwarded);
+
 public record GameSessionStateDto(
     int SessionId,
     string InviteToken,
@@ -50,7 +55,10 @@ public record CurrentQuestionAdminDto(
     bool IsPaused,
     /// <summary>Vrai pour une feature à résolution différée (closest-guess) quand il reste des réponses en
     /// attente de classement — le host peut alors déclencher la révélation manuellement.</summary>
-    bool AwaitingDeferredResolution);
+    bool AwaitingDeferredResolution,
+    /// <summary>order-list uniquement : l'état de chaque groupe (joueur solo ou équipe) en train de jouer
+    /// cette question. Null pour toute autre feature.</summary>
+    List<OrderListGroupStateDto>? OrderListGroups = null);
 
 /// <summary>Vue GM de toutes les réponses reçues pour la question courante, jugées ou non — permet de voir
 /// passer les réponses même en validation automatique et de corriger un verdict à tout moment.</summary>
@@ -73,6 +81,14 @@ public record SubmitAnswerRequest(Guid ConnectionToken, string RawAnswer);
 public record BuzzRequest(Guid ConnectionToken);
 
 public record SubmitAnswerResponse(bool? IsCorrect, int PointsAwarded, string ValidationMode);
+
+/// <summary>order-list : nouvel ordre après un glisser-déposer terminé — met à jour le brouillon du
+/// groupe (joueur seul, ou toute son équipe en mode équipe), ne note rien.</summary>
+public record OrderDraftRequest(Guid ConnectionToken, List<string> ItemOrder);
+
+public record OrderSubmitRequest(Guid ConnectionToken);
+
+public record OrderSubmitResponse(int PointsAwarded, List<string> ChainItemIds);
 
 public record ValidateAnswerRequest(bool IsCorrect);
 
