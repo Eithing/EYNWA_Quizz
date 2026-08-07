@@ -37,6 +37,55 @@ export interface ThemeBoardEntry {
   resolution: ThemeResolution;
 }
 
+export type RandomDrawMode = 'Reveal' | 'GuessWinner' | 'GuessRanking';
+
+/** Classement "olympique" par proximité : Rank partagé entre égalités, IsWinner vrai pour tout le rang 0. */
+export interface RandomDrawResultEntry {
+  playerId: number;
+  playerPseudo: string;
+  guessValue: number;
+  rank: number;
+  isWinner: boolean;
+}
+
+/** Outil host actif, indépendant de GameSessionStatus. results reste null tant que non résolu. */
+export interface RandomDrawState {
+  id: number;
+  mode: RandomDrawMode;
+  label: string;
+  minValue: number;
+  maxValue: number;
+  /** Vide = tout le monde concerné. */
+  concernedPlayerIds: number[];
+  submittedPlayerIds: number[];
+  isResolved: boolean;
+  drawnValue: number | null;
+  results: RandomDrawResultEntry[] | null;
+}
+
+export interface StrawPollOption {
+  id: string;
+  text: string;
+}
+
+export interface StrawPollResult {
+  optionId: string;
+  voteCount: number;
+}
+
+/** Outil host actif, indépendant de GameSessionStatus. results reste null tant que resultsRevealed est faux. */
+export interface StrawPollState {
+  id: number;
+  question: string;
+  options: StrawPollOption[];
+  allowMultipleVotes: boolean;
+  /** Vide = tout le monde concerné. */
+  concernedPlayerIds: number[];
+  votedPlayerIds: number[];
+  resultsRevealed: boolean;
+  results: StrawPollResult[] | null;
+}
+
 export interface GameSessionState {
   sessionId: number;
   inviteToken: string;
@@ -58,6 +107,10 @@ export interface GameSessionState {
   /** Manche "à quoi pense l'autre" : joueur désigné pour répondre en privé à la question courante. */
   currentAnswererPlayerId: number | null;
   currentAnswererPseudo: string | null;
+  /** Outil host actif, indépendant de status — null si aucun tirage en cours. */
+  activeRandomDraw: RandomDrawState | null;
+  /** Outil host actif, indépendant de status — null si aucun sondage en cours. */
+  activeStrawPoll: StrawPollState | null;
 }
 
 export interface CurrentQuestionAdmin {
@@ -172,18 +225,28 @@ export interface ZoomPublicPayload {
   imageUrl: string;
   zoomFocusX: number;
   zoomFocusY: number;
+  expectedAnswerCount: number;
+  /** Null en mode "points uniformes" (les points dépendent du palier de zoom courant, déjà affiché
+   * ailleurs) — non-null seulement en mode "points personnalisés par réponse". */
+  expectedAnswerPoints: number[] | null;
 }
 
 export interface QaPublicPayload {
   questionText: string;
+  expectedAnswerCount: number;
+  expectedAnswerPoints: number[] | null;
 }
 
 export interface BlindTestPublicPayload {
   audioUrl: string;
+  expectedAnswerCount: number;
+  expectedAnswerPoints: number[] | null;
 }
 
 export interface ImageGuessPublicPayload {
   imageUrl: string;
+  expectedAnswerCount: number;
+  expectedAnswerPoints: number[] | null;
 }
 
 export interface ClosestGuessPublicPayload {
@@ -199,4 +262,18 @@ export interface OrderListPublicPayload {
   questionText: string;
   contentType: 'Text' | 'Image' | 'Audio';
   items: OrderListItem[];
+}
+
+export interface QcmOptionPublic {
+  id: string;
+  content: string;
+}
+
+export interface QcmPublicPayload {
+  questionText: string;
+  options: QcmOptionPublic[];
+  /** Nombre maximum d'options sélectionnables (= nombre de bonnes réponses) — plafond anti-triche. */
+  maxSelectable: number;
+  /** Valeurs de points des bonnes réponses, sans association à une option précise. */
+  correctOptionPoints: number[];
 }

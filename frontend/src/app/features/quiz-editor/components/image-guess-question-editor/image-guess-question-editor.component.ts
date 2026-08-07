@@ -1,36 +1,57 @@
-import { Component, effect, input, output, signal } from '@angular/core';
+import { Component, computed, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MediaService } from '../../../../core/services/media.service';
+import { ExpectedAnswerDraft, ExpectedAnswersEditorComponent } from '../expected-answers-editor/expected-answers-editor.component';
 
 interface ImageGuessQuestionPayload {
   imageUrl: string;
+  /** Legacy, lu uniquement pour la rétrocompatibilité — voir toExpectedAnswers(). */
   acceptedAnswers: string[];
+  expectedAnswers: ExpectedAnswerDraft[];
 }
 
 function defaultPayload(): ImageGuessQuestionPayload {
-  return { imageUrl: '', acceptedAnswers: [] };
+  return { imageUrl: '', acceptedAnswers: [], expectedAnswers: [] };
+}
+
+function toExpectedAnswers(payload: ImageGuessQuestionPayload): ExpectedAnswerDraft[] {
+  if (payload.expectedAnswers.length > 0) {
+    return payload.expectedAnswers;
+  }
+  if (payload.acceptedAnswers.length > 0) {
+    return [{ acceptedVariants: payload.acceptedAnswers, points: null }];
+  }
+  return [];
 }
 
 @Component({
   selector: 'app-image-guess-question-editor',
-  imports: [FormsModule],
+  imports: [FormsModule, ExpectedAnswersEditorComponent],
   templateUrl: './image-guess-question-editor.component.html',
   styleUrl: './image-guess-question-editor.component.scss'
 })
 export class ImageGuessQuestionEditorComponent {
   readonly payloadJson = input.required<string>();
+  readonly configJson = input<string>('{}');
   readonly payloadJsonChange = output<string>();
 
   protected readonly payload = signal<ImageGuessQuestionPayload>(defaultPayload());
-  protected readonly acceptedAnswersText = signal('');
   protected readonly uploading = signal(false);
   protected readonly uploadError = signal<string | null>(null);
+
+  protected readonly pointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
+    try {
+      const parsed = JSON.parse(this.configJson());
+      return parsed.pointsMode === 'PerAnswer' ? 'PerAnswer' : 'Uniform';
+    } catch {
+      return 'Uniform';
+    }
+  });
 
   constructor(protected readonly mediaService: MediaService) {
     effect(() => {
       const parsed = this.parse(this.payloadJson());
-      this.payload.set(parsed);
-      this.acceptedAnswersText.set(parsed.acceptedAnswers.join(', '));
+      this.payload.set({ ...parsed, expectedAnswers: toExpectedAnswers(parsed) });
     });
   }
 
@@ -71,14 +92,8 @@ export class ImageGuessQuestionEditorComponent {
     input.value = '';
   }
 
-  protected onAcceptedAnswersChange(value: string): void {
-    this.acceptedAnswersText.set(value);
-    const answers = value
-      .split(',')
-      .map((a) => a.trim())
-      .filter((a) => a.length > 0);
-
-    this.payload.update((p) => ({ ...p, acceptedAnswers: answers }));
+  protected onExpectedAnswersChange(expectedAnswers: ExpectedAnswerDraft[]): void {
+    this.payload.update((p) => ({ ...p, expectedAnswers, acceptedAnswers: [] }));
     this.emit();
   }
 

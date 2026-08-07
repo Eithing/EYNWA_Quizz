@@ -1,4 +1,4 @@
-import { Component, effect, input, output, signal } from '@angular/core';
+import { Component, computed, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 interface QaRoundConfig {
@@ -13,6 +13,7 @@ interface QaRoundConfig {
   rankBasedScoring: boolean;
   rankMaxPoints: number;
   rankPointsDecrement: number;
+  pointsMode: 'Uniform' | 'PerAnswer';
 }
 
 function defaultConfig(): QaRoundConfig {
@@ -27,9 +28,12 @@ function defaultConfig(): QaRoundConfig {
     retryCooldownSeconds: 0,
     rankBasedScoring: false,
     rankMaxPoints: 100,
-    rankPointsDecrement: 10
+    rankPointsDecrement: 10,
+    pointsMode: 'Uniform'
   };
 }
+
+export type ScoringMode = 'Fixed' | 'RankBased' | 'PerAnswer';
 
 @Component({
   selector: 'app-qa-round-config',
@@ -42,6 +46,14 @@ export class QaRoundConfigComponent {
   readonly configJsonChange = output<string>();
 
   protected readonly config = signal<QaRoundConfig>(defaultConfig());
+
+  protected readonly scoringMode = computed<ScoringMode>(() => {
+    const c = this.config();
+    if (c.pointsMode === 'PerAnswer') {
+      return 'PerAnswer';
+    }
+    return c.rankBasedScoring ? 'RankBased' : 'Fixed';
+  });
 
   constructor() {
     effect(() => this.config.set(this.parse(this.configJson())));
@@ -99,8 +111,12 @@ export class QaRoundConfigComponent {
     this.emit();
   }
 
-  protected onRankBasedScoringChange(value: boolean): void {
-    this.config.update((c) => ({ ...c, rankBasedScoring: value }));
+  protected onScoringModeChange(value: ScoringMode): void {
+    this.config.update((c) => ({
+      ...c,
+      rankBasedScoring: value === 'RankBased',
+      pointsMode: value === 'PerAnswer' ? 'PerAnswer' : 'Uniform'
+    }));
     this.emit();
   }
 

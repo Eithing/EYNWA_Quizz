@@ -9,6 +9,7 @@ import {
   Player,
   PlayerQuestion,
   OrderSubmitResponse,
+  RandomDrawMode,
   RoundPreview,
   SubmitAnswerResponse,
   Team
@@ -123,6 +124,53 @@ export class SessionService {
     });
   }
 
+  // Outils host (tirage aléatoire, sondage)
+
+  startRandomDraw(
+    sessionId: number,
+    mode: RandomDrawMode,
+    label: string,
+    minValue: number,
+    maxValue: number,
+    playerIds: number[],
+    teamIds: number[]
+  ) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/random-draw/start`, {
+      mode,
+      label,
+      minValue,
+      maxValue,
+      playerIds,
+      teamIds
+    });
+  }
+
+  revealRandomDraw(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/random-draw/reveal`, {});
+  }
+
+  closeRandomDraw(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/random-draw/close`, {});
+  }
+
+  startStrawPoll(sessionId: number, question: string, options: string[], allowMultipleVotes: boolean, playerIds: number[], teamIds: number[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/strawpoll/start`, {
+      question,
+      options,
+      allowMultipleVotes,
+      playerIds,
+      teamIds
+    });
+  }
+
+  revealStrawPollResults(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/strawpoll/reveal-results`, {});
+  }
+
+  closeStrawPoll(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/strawpoll/close`, {});
+  }
+
   // Joueurs (anonyme)
 
   getPublicState(token: string) {
@@ -159,5 +207,19 @@ export class SessionService {
 
   submitOrderFinal(token: string, connectionToken: string) {
     return this.http.post<OrderSubmitResponse>(`${this.baseUrl}/by-token/${token}/order-submit`, { connectionToken });
+  }
+
+  submitRandomDrawGuess(token: string, connectionToken: string, guessValue: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/by-token/${token}/random-draw/guess`, {
+      connectionToken,
+      guessValue
+    });
+  }
+
+  submitStrawPollVote(token: string, connectionToken: string, optionIds: string[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/by-token/${token}/strawpoll/vote`, {
+      connectionToken,
+      optionIds
+    });
   }
 }

@@ -1,0 +1,26 @@
+.qcm-round-config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.qcm-round-config__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.qcm-round-config__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.qcm-round-config__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+}

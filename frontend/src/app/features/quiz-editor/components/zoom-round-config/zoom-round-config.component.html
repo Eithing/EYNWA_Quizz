@@ -59,12 +59,16 @@
     </div>
   }
 
-  <label class="zoom-round-config__checkbox">
-    <input type="checkbox" [checked]="config().rankBasedScoring" (change)="onRankBasedScoringChange($any($event.target).checked)" />
-    Points dégressifs selon l'ordre d'arrivée (1er = max, puis -X par rang) au lieu des points par palier
-  </label>
+  <div class="form-field">
+    <label for="zoom-scoring-mode">Mode de points</label>
+    <select id="zoom-scoring-mode" [value]="scoringMode()" (change)="onScoringModeChange($any($event.target).value)">
+      <option value="Dezoom">Points par palier de dézoom (normal)</option>
+      <option value="RankBased">Dégressifs selon l'ordre d'arrivée (1er = max, puis -X par rang)</option>
+      <option value="PerAnswer">Personnalisés par réponse (remplace le dézoom, réglé question par question)</option>
+    </select>
+  </div>
 
-  @if (config().rankBasedScoring) {
+  @if (scoringMode() === 'RankBased') {
     <div class="zoom-round-config__row">
       <div class="form-field">
         <label for="zoom-rank-max-points">Points du 1er</label>
@@ -90,13 +94,22 @@
     </div>
   }
 
+  @if (scoringMode() === 'PerAnswer') {
+    <p class="zoom-round-config__hint">
+      Chaque question peut désormais attendre plusieurs réponses distinctes, chacune avec son propre
+      nombre de points — à régler directement dans l'éditeur de chaque question. La dégressivité du
+      dézoom ne s'applique plus sur cette manche : chaque réponse rapporte son montant fixe, peu importe
+      le palier atteint.
+    </p>
+  }
+
   <div class="form-field">
     <label>Paliers de dézoom (du plus zoomé au plus large)</label>
     @for (step of config().zoomSteps; track $index; let i = $index) {
       <div class="zoom-step">
         <input type="number" step="0.5" [value]="step.level" (input)="onStepChange(i, 'level', $any($event.target).valueAsNumber)" placeholder="Niveau" />
         <input type="number" [value]="step.durationSeconds" (input)="onStepChange(i, 'durationSeconds', $any($event.target).valueAsNumber)" placeholder="Durée (s)" />
-        @if (!config().rankBasedScoring) {
+        @if (scoringMode() === 'Dezoom') {
           <input type="number" [value]="step.points" (input)="onStepChange(i, 'points', $any($event.target).valueAsNumber)" placeholder="Points" />
         }
         <button type="button" class="btn btn-danger" (click)="removeStep(i)">✕</button>

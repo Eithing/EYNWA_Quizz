@@ -1,33 +1,59 @@
-import { Component, effect, input, output, signal } from '@angular/core';
+import { Component, computed, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ExpectedAnswerDraft, ExpectedAnswersEditorComponent } from '../expected-answers-editor/expected-answers-editor.component';
 
 interface QaQuestionPayload {
   questionText: string;
+  /** Legacy, lu uniquement pour la rétrocompatibilité — voir toExpectedAnswers(). */
   acceptedAnswers: string[];
+  expectedAnswers: ExpectedAnswerDraft[];
 }
 
 function defaultPayload(): QaQuestionPayload {
-  return { questionText: '', acceptedAnswers: [] };
+  return { questionText: '', acceptedAnswers: [], expectedAnswers: [] };
+}
+
+/** ExpectedAnswers si renseigné, sinon reconstruit depuis l'ancien acceptedAnswers plat (une seule
+ * réponse attendue, synonymes = l'ancienne liste) — miroir de QaQuestionPayload.ExpectedAnswersOrLegacy()
+ * côté backend, pour que l'éditeur affiche correctement les questions créées avant les réponses multiples. */
+function toExpectedAnswers(payload: QaQuestionPayload): ExpectedAnswerDraft[] {
+  if (payload.expectedAnswers.length > 0) {
+    return payload.expectedAnswers;
+  }
+  if (payload.acceptedAnswers.length > 0) {
+    return [{ acceptedVariants: payload.acceptedAnswers, points: null }];
+  }
+  return [];
 }
 
 @Component({
   selector: 'app-qa-question-editor',
-  imports: [FormsModule],
+  imports: [FormsModule, ExpectedAnswersEditorComponent],
   templateUrl: './qa-question-editor.component.html',
   styleUrl: './qa-question-editor.component.scss'
 })
 export class QaQuestionEditorComponent {
   readonly payloadJson = input.required<string>();
+  readonly configJson = input<string>('{}');
   readonly payloadJsonChange = output<string>();
 
   protected readonly payload = signal<QaQuestionPayload>(defaultPayload());
-  protected readonly acceptedAnswersText = signal('');
+
+  protected readonly pointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
+    try {
+      const parsed = JSON.parse(this.configJson());
+      return parsed.pointsMode === 'PerAnswer' ? 'PerAnswer' : 'Uniform';
+    } catch {
+      return 'Uniform';
+    }
+  });
 
   constructor() {
     effect(() => {
       const parsed = this.parse(this.payloadJson());
-      this.payload.set(parsed);
-      this.acceptedAnswersText.set(parsed.acceptedAnswers.join(', '));
+      // Migration douce à l'affichage : dès que l'éditeur ré-émet (n'importe quelle modification), le
+      // payload repart au nouveau format — acceptedAnswers ne sera alors plus jamais réécrit.
+      this.payload.set({ ...parsed, expectedAnswers: toExpectedAnswers(parsed) });
     });
   }
 
@@ -48,14 +74,9 @@ export class QaQuestionEditorComponent {
     this.emit();
   }
 
-  protected onAcceptedAnswersChange(value: string): void {
-    this.acceptedAnswersText.set(value);
-    const answers = value
-      .split(',')
-      .map((a) => a.trim())
-      .filter((a) => a.length > 0);
-
-    this.payload.update((p) => ({ ...p, acceptedAnswers: answers }));
+  protected onExpectedAnswersChange(expectedAnswers: ExpectedAnswerDraft[]): void {
+    // acceptedAnswers legacy vidé : ce payload est désormais toujours lu via expectedAnswers.
+    this.payload.update((p) => ({ ...p, expectedAnswers, acceptedAnswers: [] }));
     this.emit();
   }
 }

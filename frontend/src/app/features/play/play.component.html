@@ -5,6 +5,94 @@
       <span class="play__score">{{ myScore() }} pts</span>
     </div>
 
+    @if (s.activeRandomDraw; as draw) {
+      @if (isConcernedByRandomDraw()) {
+        <div class="play__tool-overlay">
+          <app-ui-card>
+            <p class="play__question-text">🎲 {{ draw.label || 'Tirage aléatoire' }}</p>
+            <p class="play__hint">Entre {{ draw.minValue }} et {{ draw.maxValue }}</p>
+
+            @if (draw.mode === 'Reveal') {
+              <p class="play__reveal-target">Résultat : <strong>{{ draw.drawnValue }}</strong></p>
+            } @else if (hasSubmittedRandomDrawGuess()) {
+              @if (!draw.isResolved) {
+                <p class="play__hint">Devinette envoyée — en attente de la révélation…</p>
+              } @else {
+                <p class="play__reveal-target">Valeur tirée : <strong>{{ draw.drawnValue }}</strong></p>
+                <ol class="play__order-list play__order-list--reveal">
+                  @for (entry of draw.results ?? []; track entry.playerId) {
+                    <li [class.play__order-list-item--chained]="entry.isWinner">
+                      <span>#{{ entry.rank + 1 }} {{ entry.playerPseudo }} — {{ entry.guessValue }}</span>
+                    </li>
+                  }
+                </ol>
+              }
+            } @else {
+              <form class="play__form" (submit)="$event.preventDefault(); submitRandomDrawGuess()">
+                <input
+                  type="number"
+                  [min]="draw.minValue"
+                  [max]="draw.maxValue"
+                  [value]="randomDrawGuessValue()"
+                  (input)="randomDrawGuessValue.set($any($event.target).valueAsNumber)"
+                />
+                <button type="submit" class="btn btn-primary" [disabled]="randomDrawGuessSubmitting()">
+                  {{ randomDrawGuessSubmitting() ? 'Envoi…' : 'Valider' }}
+                </button>
+              </form>
+
+              @if (randomDrawGuessError(); as message) {
+                <p class="play__error">{{ message }}</p>
+              }
+            }
+          </app-ui-card>
+        </div>
+      }
+    }
+    @if (s.activeStrawPoll; as poll) {
+      @if (isConcernedByStrawPoll()) {
+        <div class="play__tool-overlay">
+          <app-ui-card>
+            <p class="play__question-text">📊 {{ poll.question }}</p>
+
+            @if (!poll.resultsRevealed) {
+              @if (hasVotedStrawPoll()) {
+                <p class="play__hint">Vote envoyé — en attente des résultats…</p>
+              } @else {
+                <form class="play__form play__form--multi" (submit)="$event.preventDefault(); submitStrawPollVote()">
+                  @for (option of poll.options; track option.id) {
+                    <label class="play__qcm-option">
+                      <input
+                        type="checkbox"
+                        [checked]="strawPollSelectedOptionIds().includes(option.id)"
+                        (change)="toggleStrawPollOption(option.id)"
+                      />
+                      <span>{{ option.text }}</span>
+                    </label>
+                  }
+                  <button type="submit" class="btn btn-primary" [disabled]="strawPollVoteSubmitting() || strawPollSelectedOptionIds().length === 0">
+                    {{ strawPollVoteSubmitting() ? 'Envoi…' : 'Voter' }}
+                  </button>
+                </form>
+
+                @if (strawPollVoteError(); as message) {
+                  <p class="play__error">{{ message }}</p>
+                }
+              }
+            } @else {
+              <ul class="play__order-list play__order-list--reveal">
+                @for (result of poll.results ?? []; track result.optionId) {
+                  <li>
+                    <span>{{ strawPollOptionText(poll, result.optionId) }} — {{ result.voteCount }} vote(s)</span>
+                  </li>
+                }
+              </ul>
+            }
+          </app-ui-card>
+        </div>
+      }
+    }
+
     <div class="play__layout" [class.play__layout--with-sidebar]="s.scoreboardVisible">
       <div class="play__main">
         @if (s.status === 'Lobby') {
@@ -99,6 +187,10 @@
 
               @if (partnerGuessPayload(); as pg) {
                 <p class="play__question-text">{{ pg.questionText }}</p>
+              }
+
+              @if (qcmPayload(); as qcm) {
+                <p class="play__question-text">{{ qcm.questionText }}</p>
               }
 
               @if (q.isAnswerWindowOpen) {
@@ -271,6 +363,50 @@
                     <p class="play__error">{{ message }}</p>
                   }
                 }
+              } @else if (q.featureTypeKey === 'multiple-choice') {
+                @if (q.isSpectator) {
+                  <p class="play__hint play__spectator">
+                    👀 Vous êtes spectateur pour cette manche
+                    @if (participantNames(); as names) {
+                      — c'est au tour de <strong>{{ names }}</strong>.
+                    }
+                  </p>
+                } @else if (q.hasAnswered) {
+                  <p class="play__answered">
+                    Réponse envoyée
+                    @if (result(); as r) {
+                      — {{ r.isCorrect ? 'Correcte ✓' : 'Incorrecte ✕' }} ({{ r.pointsAwarded }} pts)
+                    }
+                  </p>
+                } @else if (q.isAnswerWindowOpen) {
+                  @if (qcmPointsLabel(); as label) {
+                    <p class="play__hint play__expected-answers-hint">{{ label }}</p>
+                  }
+
+                  <form class="play__form play__form--qcm" (submit)="$event.preventDefault(); submitQcmAnswer()">
+                    @for (option of qcmPayload()?.options ?? []; track option.id) {
+                      @let atCap = !qcmSelectedOptionIds().includes(option.id) && qcmSelectedOptionIds().length >= (qcmPayload()?.maxSelectable ?? 0);
+                      <label class="play__qcm-option" [class.play__qcm-option--disabled]="atCap">
+                        <input
+                          type="checkbox"
+                          [checked]="qcmSelectedOptionIds().includes(option.id)"
+                          [disabled]="atCap"
+                          (change)="toggleQcmOption(option.id)"
+                        />
+                        <span>{{ option.content }}</span>
+                      </label>
+                    }
+                    <button type="submit" class="btn btn-primary" [disabled]="submitting() || qcmSelectedOptionIds().length === 0">
+                      {{ submitting() ? 'Envoi…' : 'Valider' }}
+                    </button>
+                  </form>
+
+                  @if (error(); as message) {
+                    <p class="play__error">{{ message }}</p>
+                  }
+                } @else {
+                  <p class="play__hint">Temps écoulé — en attente du résultat…</p>
+                }
               } @else if (q.isSpectator) {
                 <p class="play__hint play__spectator">
                   👀 Vous êtes spectateur pour cette manche
@@ -304,14 +440,20 @@
                   }
                 </p>
               } @else if (q.isAnswerWindowOpen) {
-                <form class="play__form" (submit)="$event.preventDefault(); submitAnswer()">
-                  <input
-                    type="text"
-                    placeholder="Ta réponse…"
-                    autocomplete="off"
-                    [value]="answer()"
-                    (input)="answer.set($any($event.target).value)"
-                  />
+                @if (expectedAnswerPointsLabel(); as label) {
+                  <p class="play__hint play__expected-answers-hint">{{ label }}</p>
+                }
+
+                <form class="play__form play__form--multi" (submit)="$event.preventDefault(); submitQaAnswer()">
+                  @for (value of answers(); track $index; let i = $index) {
+                    <input
+                      type="text"
+                      [placeholder]="answers().length > 1 ? 'Réponse ' + (i + 1) + '…' : 'Ta réponse…'"
+                      autocomplete="off"
+                      [value]="value"
+                      (input)="onAnswerFieldChange(i, $any($event.target).value)"
+                    />
+                  }
                   <button type="submit" class="btn btn-primary" [disabled]="submitting()">
                     {{ submitting() ? 'Envoi…' : 'Valider' }}
                   </button>

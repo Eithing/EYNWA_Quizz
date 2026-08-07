@@ -1,5 +1,5 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
-import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { GameSignalrService } from '../../core/services/game-signalr.service';
@@ -15,6 +15,7 @@ import {
   OrderListPublicPayload,
   PlayerQuestion,
   QaPublicPayload,
+  QcmPublicPayload,
   SubmitAnswerResponse,
   ZoomPublicPayload
 } from '../../models/session.model';
@@ -24,6 +25,16 @@ import { UiCardComponent } from '../../shared/components/ui-card/ui-card.compone
 import { ZoomViewerComponent } from '../../shared/components/zoom-viewer/zoom-viewer.component';
 
 const POLL_INTERVAL_MS = 800;
+
+function joinWithEt(values: number[]): string {
+  if (values.length <= 1) {
+    return values.join('');
+  }
+  if (values.length === 2) {
+    return `${values[0]} et ${values[1]}`;
+  }
+  return `${values.slice(0, -1).join(', ')} et ${values[values.length - 1]}`;
+}
 
 @Component({
   selector: 'app-play',
@@ -49,6 +60,40 @@ export class PlayComponent implements OnInit, OnDestroy {
   );
 
   protected readonly hasBuzzer = computed(() => this.state()?.currentBuzzHolderPlayerId === this.playerInfo?.playerId);
+
+  protected readonly isConcernedByRandomDraw = computed(() => {
+    const draw = this.state()?.activeRandomDraw;
+    if (!draw) {
+      return false;
+    }
+    return draw.concernedPlayerIds.length === 0 || draw.concernedPlayerIds.includes(this.playerInfo?.playerId);
+  });
+
+  protected readonly hasSubmittedRandomDrawGuess = computed(() => {
+    const draw = this.state()?.activeRandomDraw;
+    return draw ? draw.submittedPlayerIds.includes(this.playerInfo?.playerId) : false;
+  });
+
+  protected readonly isConcernedByStrawPoll = computed(() => {
+    const poll = this.state()?.activeStrawPoll;
+    if (!poll) {
+      return false;
+    }
+    return poll.concernedPlayerIds.length === 0 || poll.concernedPlayerIds.includes(this.playerInfo?.playerId);
+  });
+
+  protected readonly hasVotedStrawPoll = computed(() => {
+    const poll = this.state()?.activeStrawPoll;
+    return poll ? poll.votedPlayerIds.includes(this.playerInfo?.playerId) : false;
+  });
+
+  protected readonly randomDrawGuessValue = signal(0);
+  protected readonly randomDrawGuessSubmitting = signal(false);
+  protected readonly randomDrawGuessError = signal<string | null>(null);
+
+  protected readonly strawPollSelectedOptionIds = signal<string[]>([]);
+  protected readonly strawPollVoteSubmitting = signal(false);
+  protected readonly strawPollVoteError = signal<string | null>(null);
 
   protected readonly participantNames = computed(() => {
     const s = this.state();
@@ -85,6 +130,43 @@ export class PlayComponent implements OnInit, OnDestroy {
     const question = this.question();
     return question?.featureTypeKey === 'image-guess' ? JSON.parse(question.publicPayloadJson) : null;
   });
+
+  /** Nombre de réponses distinctes attendues pour la question courante (qa-text/zoom-image/blind-test/
+   * image-guess — et partner-guess phase 2, qui reste toujours à 1 puisque son payload est synthétisé
+   * dynamiquement à partir de la réponse privée de l'answerer, jamais du réglage multi-réponses du GM). */
+  protected readonly currentExpectedAnswerCount = computed(
+    () =>
+      this.zoomPayload()?.expectedAnswerCount ??
+      this.qaPayload()?.expectedAnswerCount ??
+      this.blindTestPayload()?.expectedAnswerCount ??
+      this.imageGuessPayload()?.expectedAnswerCount ??
+      1
+  );
+
+  protected readonly currentExpectedAnswerPoints = computed<number[] | null>(
+    () =>
+      this.zoomPayload()?.expectedAnswerPoints ??
+      this.qaPayload()?.expectedAnswerPoints ??
+      this.blindTestPayload()?.expectedAnswerPoints ??
+      this.imageGuessPayload()?.expectedAnswerPoints ??
+      null
+  );
+
+  /** Ex: "2 réponses attendues (1 et 2 points)" — affiché au-dessus du formulaire pour que le joueur
+   * sache combien de champs remplir et ce que rapporte chacun avant de répondre. */
+  protected readonly expectedAnswerPointsLabel = computed(() => {
+    const points = this.currentExpectedAnswerPoints();
+    if (!points || points.length === 0) {
+      return null;
+    }
+    const noun = points.length > 1 ? 'réponses attendues' : 'réponse attendue';
+    const pointWord = points.length === 1 && points[0] <= 1 ? 'point' : 'points';
+    return `${points.length} ${noun} (${joinWithEt(points)} ${pointWord})`;
+  });
+
+  /** Un champ par réponse attendue pour qa-text/zoom-image/blind-test/image-guess (et le formulaire
+   * générique de partner-guess phase 2, toujours à 1 champ — voir currentExpectedAnswerCount). */
+  protected readonly answers = signal<string[]>(['']);
 
   protected readonly closestGuessPayload = computed<ClosestGuessPublicPayload | null>(() => {
     const question = this.question();
@@ -124,6 +206,26 @@ export class PlayComponent implements OnInit, OnDestroy {
     return q.orderListCorrectOrder.map((id) => byId.get(id)).filter((it): it is OrderListItem => !!it);
   });
 
+  protected readonly qcmPayload = computed<QcmPublicPayload | null>(() => {
+    const question = this.question();
+    return question?.featureTypeKey === 'multiple-choice' ? JSON.parse(question.publicPayloadJson) : null;
+  });
+
+  /** IDs des options cochées pour la question QCM courante — remis à zéro à chaque nouvelle question
+   * via l'effet du constructeur (comme answers() pour qa-text/zoom-image/...). */
+  protected readonly qcmSelectedOptionIds = signal<string[]>([]);
+
+  protected readonly qcmPointsLabel = computed(() => {
+    const payload = this.qcmPayload();
+    if (!payload || payload.correctOptionPoints.length === 0) {
+      return null;
+    }
+    const points = payload.correctOptionPoints;
+    const noun = payload.maxSelectable > 1 ? 'bonnes réponses' : 'bonne réponse';
+    const pointWord = points.length === 1 && points[0] <= 1 ? 'point' : 'points';
+    return `${payload.maxSelectable} ${noun} (${joinWithEt(points)} ${pointWord})`;
+  });
+
   protected readonly orderListSubmitting = signal(false);
   protected readonly orderListError = signal<string | null>(null);
   /** Vrai pendant un glisser-déposer order-list en cours (entre cdkDragStarted et cdkDragEnded) : le
@@ -157,7 +259,38 @@ export class PlayComponent implements OnInit, OnDestroy {
     private readonly sessionService: SessionService,
     private readonly signalrService: GameSignalrService,
     private readonly mediaService: MediaService
-  ) {}
+  ) {
+    // Redimensionne/vide les champs de réponse dès que le nombre de réponses attendues change (nouvelle
+    // question) — onStateChanged/refreshQuestion ci-dessous remettent déjà answers() à [''] à chaque
+    // nouvelle question, cet effet ajuste juste la longueur si la question suivante en attend plusieurs.
+    effect(() => {
+      const count = this.currentExpectedAnswerCount();
+      if (this.answers().length !== count) {
+        this.answers.set(Array.from({ length: count }, () => ''));
+      }
+    });
+
+    // Vide le formulaire de devinette/vote dès qu'un nouvel outil host démarre (ID différent).
+    let lastRandomDrawId: number | null = null;
+    effect(() => {
+      const id = this.state()?.activeRandomDraw?.id ?? null;
+      if (id !== lastRandomDrawId) {
+        lastRandomDrawId = id;
+        this.randomDrawGuessValue.set(this.state()?.activeRandomDraw?.minValue ?? 0);
+        this.randomDrawGuessError.set(null);
+      }
+    });
+
+    let lastStrawPollId: number | null = null;
+    effect(() => {
+      const id = this.state()?.activeStrawPoll?.id ?? null;
+      if (id !== lastStrawPollId) {
+        lastStrawPollId = id;
+        this.strawPollSelectedOptionIds.set([]);
+        this.strawPollVoteError.set(null);
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.token = this.route.snapshot.paramMap.get('token')!;
@@ -184,6 +317,8 @@ export class PlayComponent implements OnInit, OnDestroy {
         }
         this.state.set(updated);
         this.answer.set('');
+        this.answers.set(['']);
+        this.qcmSelectedOptionIds.set([]);
         this.result.set(null);
         this.refreshQuestion();
       });
@@ -236,6 +371,143 @@ export class PlayComponent implements OnInit, OnDestroy {
         this.error.set(err.status === 409 ? 'Réponse déjà envoyée.' : "Échec de l'envoi de la réponse.");
       }
     });
+  }
+
+  protected onAnswerFieldChange(index: number, value: string): void {
+    this.answers.update((values) => {
+      const updated = [...values];
+      updated[index] = value;
+      return updated;
+    });
+  }
+
+  /** qa-text/zoom-image/blind-test/image-guess (et partner-guess phase 2, toujours à 1 champ) : une seule
+   * réponse attendue envoie le texte brut tel quel (comportement historique inchangé) ; plusieurs réponses
+   * envoient un tableau JSON — le backend sait lequel attendre via expectedAnswerCount. */
+  protected submitQaAnswer(): void {
+    const values = this.answers();
+    if (values.every((v) => !v.trim()) || this.submitting()) {
+      return;
+    }
+
+    const rawAnswer = values.length > 1 ? JSON.stringify(values) : values[0];
+
+    this.submitting.set(true);
+    this.error.set(null);
+
+    this.sessionService.submitAnswer(this.token, this.playerInfo.connectionToken, rawAnswer).subscribe({
+      next: (result) => {
+        this.submitting.set(false);
+        this.result.set(result);
+        this.question.update((q) => (q ? { ...q, hasAnswered: true } : q));
+      },
+      error: (err) => {
+        this.submitting.set(false);
+        this.error.set(err.status === 409 ? 'Réponse déjà envoyée.' : "Échec de l'envoi de la réponse.");
+      }
+    });
+  }
+
+  /** Coche/décoche une option QCM. Décocher est toujours permis ; cocher est refusé une fois le plafond
+   * (maxSelectable = nombre de bonnes réponses) atteint — même règle appliquée côté serveur dans
+   * QcmEngine.Evaluate, ceci n'est qu'un confort d'UI. */
+  protected toggleQcmOption(optionId: string): void {
+    const payload = this.qcmPayload();
+    if (!payload) {
+      return;
+    }
+    this.qcmSelectedOptionIds.update((selected) => {
+      if (selected.includes(optionId)) {
+        return selected.filter((id) => id !== optionId);
+      }
+      if (selected.length >= payload.maxSelectable) {
+        return selected;
+      }
+      return [...selected, optionId];
+    });
+  }
+
+  protected submitQcmAnswer(): void {
+    const selected = this.qcmSelectedOptionIds();
+    if (selected.length === 0 || this.submitting()) {
+      return;
+    }
+
+    this.submitting.set(true);
+    this.error.set(null);
+
+    this.sessionService.submitAnswer(this.token, this.playerInfo.connectionToken, JSON.stringify(selected)).subscribe({
+      next: (result) => {
+        this.submitting.set(false);
+        this.result.set(result);
+        this.question.update((q) => (q ? { ...q, hasAnswered: true } : q));
+      },
+      error: (err) => {
+        this.submitting.set(false);
+        this.error.set(err.status === 409 ? 'Réponse déjà envoyée.' : "Échec de l'envoi de la réponse.");
+      }
+    });
+  }
+
+  protected submitRandomDrawGuess(): void {
+    if (this.randomDrawGuessSubmitting()) {
+      return;
+    }
+
+    this.randomDrawGuessSubmitting.set(true);
+    this.randomDrawGuessError.set(null);
+
+    this.sessionService.submitRandomDrawGuess(this.token, this.playerInfo.connectionToken, this.randomDrawGuessValue()).subscribe({
+      next: (state) => {
+        this.randomDrawGuessSubmitting.set(false);
+        this.state.set(state);
+      },
+      error: (err) => {
+        this.randomDrawGuessSubmitting.set(false);
+        this.randomDrawGuessError.set(err.error ?? "Échec de l'envoi de la devinette.");
+      }
+    });
+  }
+
+  protected toggleStrawPollOption(optionId: string): void {
+    const poll = this.state()?.activeStrawPoll;
+    if (!poll) {
+      return;
+    }
+    this.strawPollSelectedOptionIds.update((selected) => {
+      if (selected.includes(optionId)) {
+        return selected.filter((id) => id !== optionId);
+      }
+      if (!poll.allowMultipleVotes) {
+        return [optionId];
+      }
+      return [...selected, optionId];
+    });
+  }
+
+  protected submitStrawPollVote(): void {
+    const selected = this.strawPollSelectedOptionIds();
+    if (selected.length === 0 || this.strawPollVoteSubmitting()) {
+      return;
+    }
+
+    this.strawPollVoteSubmitting.set(true);
+    this.strawPollVoteError.set(null);
+
+    this.sessionService.submitStrawPollVote(this.token, this.playerInfo.connectionToken, selected).subscribe({
+      next: (state) => {
+        this.strawPollVoteSubmitting.set(false);
+        this.state.set(state);
+      },
+      error: (err) => {
+        this.strawPollVoteSubmitting.set(false);
+        this.strawPollVoteError.set(err.error ?? "Échec de l'envoi du vote.");
+      }
+    });
+  }
+
+  protected strawPollOptionText(poll: NonNullable<GameSessionState['activeStrawPoll']>, optionId: string): string {
+    return poll.options.find((o) => o.id === optionId)?.text ?? '';
   }
 
   protected buzz(): void {
@@ -323,6 +595,8 @@ export class PlayComponent implements OnInit, OnDestroy {
         // l'ancien résultat/la saisie précédente pour laisser la place à un nouvel essai.
         if (previous?.questionId === question.questionId && previous.hasAnswered && !question.hasAnswered) {
           this.answer.set('');
+          this.answers.set(['']);
+          this.qcmSelectedOptionIds.set([]);
           this.result.set(null);
         }
 

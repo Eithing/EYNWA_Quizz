@@ -24,8 +24,14 @@ public class ZoomRoundConfig
     public int RetryCooldownSeconds { get; set; }
 
     /// <summary>Si vrai, les points ne dépendent plus du palier de zoom mais du rang d'arrivée parmi les bonnes réponses
-    /// (1er = RankMaxPoints, puis -RankPointsDecrement par rang suivant, plancher à 0).</summary>
+    /// (1er = RankMaxPoints, puis -RankPointsDecrement par rang suivant, plancher à 0). Mutuellement exclusif avec
+    /// PointsMode == "PerAnswer" au niveau de l'éditeur.</summary>
     public bool RankBasedScoring { get; set; }
     public int RankMaxPoints { get; set; } = 100;
     public int RankPointsDecrement { get; set; } = 10;
+
+    /// <summary>"Uniform" (défaut, la dégressivité du dézoom s'applique normalement) ou "PerAnswer" (chaque
+    /// réponse attendue porte son propre nombre de points fixe, qui REMPLACE la dégressivité du dézoom pour
+    /// cette manche — les deux mécaniques ne se cumulent pas).</summary>
+    public string PointsMode { get; set; } = "Uniform";
 }

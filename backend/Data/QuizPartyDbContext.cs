@@ -16,6 +16,10 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<RoundParticipant> RoundParticipants => Set<RoundParticipant>();
     public DbSet<ThemeState> ThemeStates => Set<ThemeState>();
+    public DbSet<RandomDrawState> RandomDrawStates => Set<RandomDrawState>();
+    public DbSet<RandomDrawGuess> RandomDrawGuesses => Set<RandomDrawGuess>();
+    public DbSet<StrawPollState> StrawPollStates => Set<StrawPollState>();
+    public DbSet<StrawPollVote> StrawPollVotes => Set<StrawPollVote>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -178,5 +182,55 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
             .WithMany()
             .HasForeignKey(a => a.QuestionId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<RandomDrawState>()
+            .Property(r => r.Mode)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<RandomDrawState>()
+            .HasOne(r => r.Session)
+            .WithMany()
+            .HasForeignKey(r => r.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RandomDrawGuess>()
+            .HasOne(g => g.RandomDrawState)
+            .WithMany(r => r.Guesses)
+            .HasForeignKey(g => g.RandomDrawStateId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RandomDrawGuess>()
+            .HasOne(g => g.Player)
+            .WithMany()
+            .HasForeignKey(g => g.PlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Une seule devinette par joueur et par tirage.
+        modelBuilder.Entity<RandomDrawGuess>()
+            .HasIndex(g => new { g.RandomDrawStateId, g.PlayerId })
+            .IsUnique();
+
+        modelBuilder.Entity<StrawPollState>()
+            .HasOne(p => p.Session)
+            .WithMany()
+            .HasForeignKey(p => p.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<StrawPollVote>()
+            .HasOne(v => v.StrawPollState)
+            .WithMany(p => p.Votes)
+            .HasForeignKey(v => v.StrawPollStateId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<StrawPollVote>()
+            .HasOne(v => v.Player)
+            .WithMany()
+            .HasForeignKey(v => v.PlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Un vote par joueur et par option (empêche un double-clic de compter deux fois la même option).
+        modelBuilder.Entity<StrawPollVote>()
+            .HasIndex(v => new { v.StrawPollStateId, v.PlayerId, v.OptionId })
+            .IsUnique();
     }
 }

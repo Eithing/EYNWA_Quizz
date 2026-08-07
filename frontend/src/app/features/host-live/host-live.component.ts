@@ -3,7 +3,15 @@ import { ActivatedRoute } from '@angular/router';
 import { GameSignalrService } from '../../core/services/game-signalr.service';
 import { MediaService } from '../../core/services/media.service';
 import { SessionService } from '../../core/services/session.service';
-import { AnswerFeedItem, CurrentQuestionAdmin, GameSessionState, Player, RoundPreview, Team } from '../../models/session.model';
+import {
+  AnswerFeedItem,
+  CurrentQuestionAdmin,
+  GameSessionState,
+  Player,
+  RandomDrawMode,
+  RoundPreview,
+  Team
+} from '../../models/session.model';
 import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
 import { ParticipantSelection, ParticipantSelectorComponent } from '../../shared/components/participant-selector/participant-selector.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
@@ -43,6 +51,19 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected readonly themeSelectorOpenId = signal<number | null>(null);
   protected readonly partnerGuessSelectorOpen = signal(false);
+
+  protected readonly randomDrawFormOpen = signal(false);
+  protected readonly randomDrawMode = signal<RandomDrawMode>('Reveal');
+  protected readonly randomDrawLabel = signal('');
+  protected readonly randomDrawMin = signal(1);
+  protected readonly randomDrawMax = signal(100);
+  protected readonly randomDrawError = signal<string | null>(null);
+
+  protected readonly strawPollFormOpen = signal(false);
+  protected readonly strawPollQuestion = signal('');
+  protected readonly strawPollOptionsText = signal('');
+  protected readonly strawPollAllowMultiple = signal(false);
+  protected readonly strawPollError = signal<string | null>(null);
 
   protected readonly pendingRoundImageUrl = computed(() => {
     const preview = this.pendingRoundPreview();
@@ -141,6 +162,47 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     try {
       const parsed = JSON.parse(question.payloadJson) as { imageUrl: string; acceptedAnswers: string[] };
       return { ...parsed, resolvedImageUrl: this.mediaService.resolveUrl(parsed.imageUrl) };
+    } catch {
+      return null;
+    }
+  });
+
+  /** qa-text/zoom-image/blind-test/image-guess : liste normalisée des réponses attendues (variantes +
+   * points, null = barème uniforme de la manche) — vue GM uniquement, question.payloadJson est le
+   * payload brut. Retombe sur l'ancien acceptedAnswers plat pour les questions jamais rééditées. */
+  protected readonly currentExpectedAnswersPreview = computed<{ acceptedVariants: string[]; points: number | null }[]>(() => {
+    const question = this.currentQuestion();
+    if (!question || !['qa-text', 'zoom-image', 'blind-test', 'image-guess'].includes(question.featureTypeKey)) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(question.payloadJson) as {
+        expectedAnswers?: { acceptedVariants: string[]; points: number | null }[];
+        acceptedAnswers?: string[];
+      };
+      if (parsed.expectedAnswers && parsed.expectedAnswers.length > 0) {
+        return parsed.expectedAnswers;
+      }
+      if (parsed.acceptedAnswers && parsed.acceptedAnswers.length > 0) {
+        return [{ acceptedVariants: parsed.acceptedAnswers, points: null }];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  /** Vue GM : question.payloadJson est le payload brut, ses options portent donc déjà isCorrect/points. */
+  protected readonly currentQcmPayload = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'multiple-choice') {
+      return null;
+    }
+    try {
+      return JSON.parse(question.payloadJson) as {
+        questionText: string;
+        options: { id: string; content: string; isCorrect: boolean; points: number | null }[];
+      };
     } catch {
       return null;
     }
@@ -357,6 +419,92 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected onSetRoundTeamMode(enabled: boolean): void {
     this.sessionService.setRoundTeamMode(this.sessionId, enabled).subscribe((state) => this.applyState(state));
+  }
+
+  protected toggleRandomDrawForm(): void {
+    this.randomDrawError.set(null);
+    this.randomDrawFormOpen.update((open) => !open);
+  }
+
+  protected onStartRandomDraw(selection: ParticipantSelection): void {
+    if (this.randomDrawMin() >= this.randomDrawMax()) {
+      this.randomDrawError.set('La valeur minimale doit être strictement inférieure à la valeur maximale.');
+      return;
+    }
+
+    this.randomDrawError.set(null);
+    this.sessionService
+      .startRandomDraw(
+        this.sessionId,
+        this.randomDrawMode(),
+        this.randomDrawLabel(),
+        this.randomDrawMin(),
+        this.randomDrawMax(),
+        selection.playerIds,
+        selection.teamIds
+      )
+      .subscribe({
+        next: (state) => {
+          this.applyState(state);
+          this.randomDrawFormOpen.set(false);
+          this.randomDrawLabel.set('');
+        },
+        error: (err) => this.randomDrawError.set(err.error ?? "Échec du lancement du tirage.")
+      });
+  }
+
+  protected revealRandomDraw(): void {
+    this.sessionService.revealRandomDraw(this.sessionId).subscribe((state) => this.applyState(state));
+  }
+
+  protected closeRandomDraw(): void {
+    this.sessionService.closeRandomDraw(this.sessionId).subscribe((state) => this.applyState(state));
+  }
+
+  protected toggleStrawPollForm(): void {
+    this.strawPollError.set(null);
+    this.strawPollFormOpen.update((open) => !open);
+  }
+
+  protected onStartStrawPoll(selection: ParticipantSelection): void {
+    const options = this.strawPollOptionsText()
+      .split('\n')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0);
+
+    if (!this.strawPollQuestion().trim()) {
+      this.strawPollError.set('Question requise.');
+      return;
+    }
+    if (options.length < 2) {
+      this.strawPollError.set('Il faut au moins 2 options (une par ligne).');
+      return;
+    }
+
+    this.strawPollError.set(null);
+    this.sessionService
+      .startStrawPoll(this.sessionId, this.strawPollQuestion(), options, this.strawPollAllowMultiple(), selection.playerIds, selection.teamIds)
+      .subscribe({
+        next: (state) => {
+          this.applyState(state);
+          this.strawPollFormOpen.set(false);
+          this.strawPollQuestion.set('');
+          this.strawPollOptionsText.set('');
+        },
+        error: (err) => this.strawPollError.set(err.error ?? 'Échec du lancement du sondage.')
+      });
+  }
+
+  protected revealStrawPollResults(): void {
+    this.sessionService.revealStrawPollResults(this.sessionId).subscribe((state) => this.applyState(state));
+  }
+
+  protected closeStrawPoll(): void {
+    this.sessionService.closeStrawPoll(this.sessionId).subscribe((state) => this.applyState(state));
+  }
+
+  protected strawPollOptionText(poll: NonNullable<GameSessionState['activeStrawPoll']>, optionId: string): string {
+    return poll.options.find((o) => o.id === optionId)?.text ?? '';
   }
 
   protected resolveOrderListMediaUrl(url: string): string {

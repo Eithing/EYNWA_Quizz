@@ -86,6 +86,22 @@
   margin-bottom: 12px;
 }
 
+.host-live__expected-answers {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+
+  strong {
+    margin-left: 6px;
+    color: var(--accent);
+  }
+}
+
 .host-live__metrics {
   display: flex;
   flex-direction: column;
@@ -486,4 +502,104 @@
   align-items: center;
   font-size: 0.85rem;
   margin-bottom: 8px;
+}
+
+.host-live__tool-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.host-live__tool-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+
+  select,
+  input[type='number'] {
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+  }
+
+  input[type='number'] {
+    width: 90px;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+}
+
+.host-live__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.host-live__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.host-live__tool-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    font-size: 0.85rem;
+  }
+}
+
+.host-live__tool-result--winner {
+  box-shadow: inset 3px 0 0 var(--success);
+}
+
+.host-live__qcm-options {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    color: var(--text-muted);
+  }
+
+  strong {
+    color: var(--accent);
+  }
+}
+
+.host-live__qcm-option--correct {
+  color: var(--success);
 }

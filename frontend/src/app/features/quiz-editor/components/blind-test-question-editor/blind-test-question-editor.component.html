@@ -16,14 +16,9 @@
     }
   </div>
 
-  <div class="form-field">
-    <label for="blind-test-accepted-answers">Réponses acceptées (séparées par des virgules)</label>
-    <input
-      id="blind-test-accepted-answers"
-      type="text"
-      placeholder="Ex : Bohemian Rhapsody, Queen"
-      [value]="acceptedAnswersText()"
-      (input)="onAcceptedAnswersChange($any($event.target).value)"
-    />
-  </div>
+  <app-expected-answers-editor
+    [expectedAnswers]="payload().expectedAnswers"
+    [pointsMode]="pointsMode()"
+    (expectedAnswersChange)="onExpectedAnswersChange($event)"
+  />
 </div>

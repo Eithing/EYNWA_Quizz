@@ -10,14 +10,9 @@
     ></textarea>
   </div>
 
-  <div class="form-field">
-    <label for="qa-accepted-answers">Réponses acceptées (séparées par des virgules)</label>
-    <input
-      id="qa-accepted-answers"
-      type="text"
-      placeholder="Ex : Reykjavik, Reykjavík"
-      [value]="acceptedAnswersText()"
-      (input)="onAcceptedAnswersChange($any($event.target).value)"
-    />
-  </div>
+  <app-expected-answers-editor
+    [expectedAnswers]="payload().expectedAnswers"
+    [pointsMode]="pointsMode()"
+    (expectedAnswersChange)="onExpectedAnswersChange($event)"
+  />
 </div>

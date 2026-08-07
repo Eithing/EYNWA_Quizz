@@ -1,0 +1,9 @@
+.qcm-question-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  textarea {
+    resize: vertical;
+  }
+}

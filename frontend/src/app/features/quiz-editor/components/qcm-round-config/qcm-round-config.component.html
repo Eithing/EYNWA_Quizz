@@ -1,0 +1,47 @@
+<div class="qcm-round-config">
+  <div class="qcm-round-config__row">
+    <div class="form-field">
+      <label for="qcm-answer-time">Temps de réponse (s)</label>
+      <input
+        id="qcm-answer-time"
+        type="number"
+        min="1"
+        [value]="config().answerTimeSeconds"
+        (input)="onAnswerTimeChange($any($event.target).valueAsNumber)"
+      />
+    </div>
+
+    <div class="form-field">
+      <label for="qcm-points-mode">Mode de points</label>
+      <select id="qcm-points-mode" [value]="config().pointsMode" (change)="onPointsModeChange($any($event.target).value)">
+        <option value="Uniform">Uniforme (même barème pour toutes les bonnes réponses)</option>
+        <option value="PerAnswer">Personnalisé (réglé option par option)</option>
+      </select>
+    </div>
+
+    @if (!isPerAnswer()) {
+      <div class="form-field">
+        <label for="qcm-points">Points par bonne réponse cochée</label>
+        <input
+          id="qcm-points"
+          type="number"
+          min="0"
+          [value]="config().points"
+          (input)="onPointsChange($any($event.target).valueAsNumber)"
+        />
+      </div>
+    }
+  </div>
+
+  @if (isPerAnswer()) {
+    <p class="qcm-round-config__hint">
+      Chaque bonne réponse peut avoir son propre nombre de points — à régler directement dans
+      l'éditeur de chaque question.
+    </p>
+  }
+
+  <label class="qcm-round-config__checkbox">
+    <input type="checkbox" [checked]="config().autoAdvance" (change)="onAutoAdvanceChange($any($event.target).checked)" />
+    Passer automatiquement à la question suivante une fois le temps écoulé
+  </label>
+</div>

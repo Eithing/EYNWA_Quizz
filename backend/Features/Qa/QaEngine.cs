@@ -41,9 +41,16 @@ public class QaEngine : IFeatureEngine
             return new FeatureAnswerEvaluation(null, 0);
         }
 
-        var isCorrect = payload.AcceptedAnswers.Any(accepted => AnswerMatcher.IsMatch(accepted, rawAnswer));
-        return new FeatureAnswerEvaluation(isCorrect, isCorrect ? config.Points : 0);
+        var expectedAnswers = payload.ExpectedAnswersOrLegacy();
+        var submittedAnswers = ExpectedAnswerMatching.SplitRawAnswer(rawAnswer, expectedAnswers.Count);
+        var result = ExpectedAnswerMatching.Match(expectedAnswers, submittedAnswers, e => EffectivePoints(e, config.Points));
+
+        return new FeatureAnswerEvaluation(result.AllMatched, result.PointsAwarded);
     }
+
+    /// <summary>Points qu'une réponse attendue précise rapporte si trouvée : son propre montant si
+    /// renseigné (mode "points personnalisés"), sinon le barème uniforme de la manche.</summary>
+    protected static int EffectivePoints(ExpectedAnswer expected, int uniformPoints) => expected.Points ?? uniformPoints;
 
     public bool IsManualValidation(string configJson) => ParseConfig(configJson).ValidationMode == "Manual";
 
@@ -63,11 +70,34 @@ public class QaEngine : IFeatureEngine
     /// <summary>En mode buzzer, une seule bonne réponse suffit : la question est une course, pas un test collectif.</summary>
     public bool RequiresAllPlayersToAnswer(string configJson) => !ParseConfig(configJson).BuzzerMode;
 
-    public virtual string BuildPublicPayloadJson(string payloadJson)
+    /// <summary>Sans accès à Round.ConfigJson (contrat IFeatureEngine minimal), le barème uniforme
+    /// affiché au joueur retombe sur la valeur par défaut — en pratique le contrôleur appelle toujours
+    /// la surcharge à deux paramètres ci-dessous, qui a le vrai Points de la manche.</summary>
+    public virtual string BuildPublicPayloadJson(string payloadJson) => BuildPublicPayloadJsonCore(payloadJson, new QaRoundConfig().Points);
+
+    /// <summary>Variante avec Round.ConfigJson : nécessaire pour connaître le barème uniforme (Points) et
+    /// calculer expectedAnswerPoints. Partagée par BlindTestEngine/ImageGuessEngine (mêmes questionText +
+    /// réponses attendues, seul le champ média diffère).</summary>
+    public virtual string BuildPublicPayloadJson(string payloadJson, string configJson) =>
+        BuildPublicPayloadJsonCore(payloadJson, ParseConfig(configJson).Points);
+
+    protected string BuildPublicPayloadJsonCore(string payloadJson, int uniformPoints)
     {
         var payload = ParsePayload(payloadJson);
-        return JsonSerializer.Serialize(new { questionText = payload.QuestionText }, PublicJsonOptions);
+        var (count, points) = BuildExpectedAnswerFields(payload.ExpectedAnswersOrLegacy(), uniformPoints);
+
+        return JsonSerializer.Serialize(
+            new { questionText = payload.QuestionText, expectedAnswerCount = count, expectedAnswerPoints = points },
+            PublicJsonOptions);
     }
+
+    /// <summary>(nombre de réponses attendues, barème visible du joueur) — réutilisé par
+    /// BlindTestEngine/ImageGuessEngine, dont le payload n'a pas de QuestionText et doit donc composer son
+    /// propre objet JSON plutôt que de passer par BuildPublicPayloadJsonCore.</summary>
+    protected static (int Count, List<int>? Points) BuildExpectedAnswerFields(List<ExpectedAnswer> expectedAnswers, int uniformPoints) => (
+        Math.Max(1, expectedAnswers.Count),
+        expectedAnswers.Count > 0 ? ExpectedAnswerMatching.BuildPointsArray(expectedAnswers, e => EffectivePoints(e, uniformPoints)) : null
+    );
 
     /// <summary>Pas de palier à révéler progressivement : une fois tout le monde répondu, plus rien à attendre.</summary>
     public double GetFastForwardTargetElapsedSeconds(string configJson) => ParseConfig(configJson).AnswerTimeSeconds;

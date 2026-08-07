@@ -35,16 +35,32 @@ public class ZoomImageEngine : IFeatureEngine
     {
         var config = ParseConfig(configJson);
         var payload = ParsePayload(payloadJson);
-        var elapsedSeconds = SessionTiming.ComputeElapsedSeconds(questionStartedAt, pausedAt, submittedAt);
-        var state = ComputeStateAtElapsed(config, elapsedSeconds);
 
         if (config.ValidationMode == "Manual")
         {
             return new FeatureAnswerEvaluation(null, 0);
         }
 
-        var isCorrect = payload.AcceptedAnswers.Any(accepted => AnswerMatcher.IsMatch(accepted, rawAnswer));
-        return new FeatureAnswerEvaluation(isCorrect, isCorrect ? state.CurrentPoints : 0);
+        var expectedAnswers = payload.ExpectedAnswersOrLegacy();
+        var submittedAnswers = ExpectedAnswerMatching.SplitRawAnswer(rawAnswer, expectedAnswers.Count);
+
+        // Mode "points personnalisés" : chaque réponse rapporte son montant fixe, la dégressivité du
+        // dézoom ne s'applique pas (les deux mécaniques ne se cumulent pas, décision produit). Sinon
+        // (Uniform), comportement historique : le palier de zoom courant fixe les points de la seule
+        // réponse attendue.
+        int EffectivePoints(ExpectedAnswer expected)
+        {
+            if (config.PointsMode == "PerAnswer")
+            {
+                return expected.Points ?? 0;
+            }
+
+            var elapsedSeconds = SessionTiming.ComputeElapsedSeconds(questionStartedAt, pausedAt, submittedAt);
+            return ComputeStateAtElapsed(config, elapsedSeconds).CurrentPoints;
+        }
+
+        var result = ExpectedAnswerMatching.Match(expectedAnswers, submittedAnswers, EffectivePoints);
+        return new FeatureAnswerEvaluation(result.AllMatched, result.PointsAwarded);
     }
 
     public bool IsManualValidation(string configJson) => ParseConfig(configJson).ValidationMode == "Manual";
@@ -61,11 +77,30 @@ public class ZoomImageEngine : IFeatureEngine
         return RankScoring.PointsForRank(config.RankMaxPoints, config.RankPointsDecrement, correctAnswerRank);
     }
 
-    public string BuildPublicPayloadJson(string payloadJson)
+    public string BuildPublicPayloadJson(string payloadJson) => BuildPublicPayloadJson(payloadJson, "{}");
+
+    public string BuildPublicPayloadJson(string payloadJson, string configJson)
     {
         var payload = ParsePayload(payloadJson);
+        var config = ParseConfig(configJson);
+        var expectedAnswers = payload.ExpectedAnswersOrLegacy();
+
+        // Le barème par réponse n'a de sens à afficher que si PointsMode == "PerAnswer" : en Uniform,
+        // les points dépendent du palier de zoom courant (déjà affiché ailleurs via currentPoints), pas
+        // d'un montant fixe par réponse — rien de statique à montrer ici dans ce cas.
+        List<int>? expectedAnswerPoints = config.PointsMode == "PerAnswer" && expectedAnswers.Count > 0
+            ? ExpectedAnswerMatching.BuildPointsArray(expectedAnswers, e => e.Points ?? 0)
+            : null;
+
         return JsonSerializer.Serialize(
-            new { imageUrl = payload.ImageUrl, zoomFocusX = payload.ZoomFocusPoint.X, zoomFocusY = payload.ZoomFocusPoint.Y },
+            new
+            {
+                imageUrl = payload.ImageUrl,
+                zoomFocusX = payload.ZoomFocusPoint.X,
+                zoomFocusY = payload.ZoomFocusPoint.Y,
+                expectedAnswerCount = Math.Max(1, expectedAnswers.Count),
+                expectedAnswerPoints
+            },
             PublicJsonOptions);
     }
 

@@ -35,6 +35,12 @@ public interface IFeatureEngine
     /// <summary>Version de Question.PayloadJson sûre à envoyer aux joueurs (sans les réponses acceptées ni tout autre champ réservé au GM).</summary>
     string BuildPublicPayloadJson(string payloadJson);
 
+    /// <summary>Variante avec accès à Round.ConfigJson, pour les features dont l'affichage public dépend
+    /// aussi de la configuration de la manche (ex: qa-text avec réponses multiples : barème des points).
+    /// Par défaut délègue simplement à la surcharge simple (configJson ignoré) — seul QaEngine (et
+    /// BlindTestEngine/ImageGuessEngine qui en héritent) la surcharge réellement.</summary>
+    string BuildPublicPayloadJson(string payloadJson, string configJson) => BuildPublicPayloadJson(payloadJson);
+
     /// <summary>Question de rapidité (buzzer) : pas de saisie écrite, le GM valide directement le joueur qui a la main. Par défaut non applicable.</summary>
     bool IsBuzzerMode(string configJson) => false;
 

@@ -28,8 +28,14 @@ public class QaRoundConfig
 
     /// <summary>Si vrai, les points ne sont plus fixes mais dépendent du rang d'arrivée parmi les bonnes réponses
     /// (1er = RankMaxPoints, puis -RankPointsDecrement par rang suivant, plancher à 0). Sans effet en mode buzzer
-    /// (une seule bonne réponse possible par question, le rang est toujours 0).</summary>
+    /// (une seule bonne réponse possible par question, le rang est toujours 0). Mutuellement exclusif avec
+    /// PointsMode == "PerAnswer" au niveau de l'éditeur (un seul sélecteur de mode de scoring) — les deux champs
+    /// restent indépendants ici pour ne pas casser les configs déjà enregistrées.</summary>
     public bool RankBasedScoring { get; set; }
     public int RankMaxPoints { get; set; } = 100;
     public int RankPointsDecrement { get; set; } = 10;
+
+    /// <summary>"Uniform" (défaut, chaque réponse trouvée rapporte Points) ou "PerAnswer" (chaque réponse
+    /// attendue de la question porte son propre nombre de points, voir ExpectedAnswer.Points).</summary>
+    public string PointsMode { get; set; } = "Uniform";
 }

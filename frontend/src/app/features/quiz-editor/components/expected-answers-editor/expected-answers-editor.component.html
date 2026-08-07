@@ -1,0 +1,43 @@
+<div class="expected-answers-editor">
+  <label>{{ expectedAnswers().length > 1 ? 'Réponses attendues' : 'Réponse(s) attendue(s)' }}</label>
+
+  <ol class="expected-answers-editor__list">
+    @for (expected of expectedAnswers(); track $index; let i = $index) {
+      <li class="expected-answers-editor__item">
+        <span class="expected-answers-editor__index">{{ i + 1 }}</span>
+
+        <input
+          type="text"
+          class="expected-answers-editor__variants"
+          placeholder="Réponse(s) tolérée(s), séparées par des virgules"
+          [value]="variantsText(i)"
+          (input)="onVariantsChange(i, $any($event.target).value)"
+        />
+
+        @if (pointsMode() === 'PerAnswer') {
+          <input
+            type="number"
+            class="expected-answers-editor__points"
+            placeholder="Points"
+            min="0"
+            [value]="expected.points"
+            (input)="onPointsChange(i, $any($event.target).valueAsNumber)"
+          />
+        }
+
+        <button type="button" class="expected-answers-editor__remove" title="Retirer cette réponse" (click)="removeAnswer(i)">✕</button>
+      </li>
+    } @empty {
+      <p class="expected-answers-editor__empty">Aucune réponse attendue pour l'instant.</p>
+    }
+  </ol>
+
+  <button type="button" class="btn btn-secondary" (click)="addAnswer()">+ Ajouter une réponse attendue</button>
+
+  @if (expectedAnswers().length > 1) {
+    <p class="expected-answers-editor__hint">
+      Le joueur devra fournir chacune de ces réponses (dans n'importe quel ordre) pour obtenir tous les
+      points. L'ordre de cette liste n'a pas d'incidence sur la correction.
+    </p>
+  }
+</div>

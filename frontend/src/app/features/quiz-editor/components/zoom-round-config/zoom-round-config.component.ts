@@ -18,6 +18,7 @@ interface ZoomRoundConfig {
   rankBasedScoring: boolean;
   rankMaxPoints: number;
   rankPointsDecrement: number;
+  pointsMode: 'Uniform' | 'PerAnswer';
 }
 
 function defaultConfig(): ZoomRoundConfig {
@@ -31,9 +32,12 @@ function defaultConfig(): ZoomRoundConfig {
     retryCooldownSeconds: 0,
     rankBasedScoring: false,
     rankMaxPoints: 100,
-    rankPointsDecrement: 10
+    rankPointsDecrement: 10,
+    pointsMode: 'Uniform'
   };
 }
+
+export type ZoomScoringMode = 'Dezoom' | 'RankBased' | 'PerAnswer';
 
 @Component({
   selector: 'app-zoom-round-config',
@@ -50,6 +54,14 @@ export class ZoomRoundConfigComponent {
   protected readonly totalDurationSeconds = computed(() => {
     const c = this.config();
     return c.zoomSteps.reduce((sum, step) => sum + step.durationSeconds, 0) + c.answerTimeSeconds;
+  });
+
+  protected readonly scoringMode = computed<ZoomScoringMode>(() => {
+    const c = this.config();
+    if (c.pointsMode === 'PerAnswer') {
+      return 'PerAnswer';
+    }
+    return c.rankBasedScoring ? 'RankBased' : 'Dezoom';
   });
 
   constructor() {
@@ -98,8 +110,12 @@ export class ZoomRoundConfigComponent {
     this.emit();
   }
 
-  protected onRankBasedScoringChange(value: boolean): void {
-    this.config.update((c) => ({ ...c, rankBasedScoring: value }));
+  protected onScoringModeChange(value: ZoomScoringMode): void {
+    this.config.update((c) => ({
+      ...c,
+      rankBasedScoring: value === 'RankBased',
+      pointsMode: value === 'PerAnswer' ? 'PerAnswer' : 'Uniform'
+    }));
     this.emit();
   }
 

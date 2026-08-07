@@ -271,6 +271,108 @@ entièrement ici avant de considérer la feature fiable.
 
 ---
 
+## 14. Réponses multiples par question + points personnalisés par réponse (lot 1 — pas testé manuellement, à valider en priorité)
+
+Aucun test manuel fait à ce stade — uniquement `dotnet build`/`npx ng build` propres. Couvre qa-text,
+zoom-image, blind-test, image-guess. **Exclu volontairement** : partner-guess (reste à 1 réponse toujours,
+comportement inchangé) et closest-guess (pas concerné, feature numérique séparée).
+
+### 14.1 Non-régression — question à 1 réponse (comportement historique)
+- [ ] Une question qa-text/zoom-image/blind-test/image-guess existante (créée avant ce lot, format `acceptedAnswers` legacy) reste jouable sans aucune modification : 1 seul champ affiché côté joueur, correction identique à avant
+- [ ] Créer une NOUVELLE question à 1 seule réponse dans l'éditeur (via le nouveau composant "réponses attendues") → toujours 1 seul champ côté joueur, comportement identique
+
+### 14.2 Réponses multiples, points uniformes
+- [ ] Round config en mode "Points fixes" (par défaut), créer une question avec 2-3 réponses attendues distinctes (ex: "cite 2 pays d'Europe" → France, Allemagne)
+- [ ] Côté joueur : le bon nombre de champs s'affiche, avec le texte "(N réponses attendues, X et X points)" au-dessus du formulaire (même valeur répétée puisque uniforme)
+- [ ] Répondre correctement à une seule des N réponses (l'autre champ vide ou faux) → crédit partiel reçu (points de la seule réponse trouvée), pas 0
+- [ ] Répondre correctement à toutes les réponses (peu importe l'ordre des champs) → tous les points, marqué comme "trouvé" (apparaît dans la liste des finders)
+- [ ] Taper la même bonne réponse dans 2 champs différents → un seul crédit compté (chaque réponse attendue n'est réclamable qu'une fois)
+
+### 14.3 Points personnalisés par réponse
+- [ ] Round config en mode "Personnalisés par réponse" → le champ "Points par bonne réponse" du round disparaît, chaque réponse de l'éditeur de question a maintenant son propre champ points
+- [ ] Créer une question à 2 réponses avec des points différents (ex: 1 et 2 points) → côté joueur, le texte affiché correspond ("2 réponses attendues 1 et 2 points")
+- [ ] Répondre correctement seulement à la réponse à 2 points → 2 points reçus (pas 1, pas 3)
+- [ ] Ambiguïté : configurer 2 réponses dont les variantes se chevauchent presque (l'une matche approximativement les deux via la tolérance aux fautes) avec des points différents → la réponse la plus généreuse est retenue en cas de doute
+
+### 14.4 zoom-image spécifique
+- [ ] Mode "Points personnalisés par réponse" sur une manche zoom-image → le champ "Points" de chaque palier de dézoom disparaît (remplacé par le réglage par réponse dans l'éditeur de question), et le score obtenu ne dépend plus du moment où on répond dans le dézoom (uniquement du barème par réponse)
+- [ ] Mode "Points fixes"/"Dégressif par rang" (Uniform) inchangé : le dézoom continue de fonctionner normalement, aucun texte de barème affiché côté joueur (pas de valeur statique à montrer puisque ça dépend du palier)
+
+### 14.5 Non-régression scoring au rang et buzzer
+- [ ] Une manche en mode "Dégressif par rang" (RankBasedScoring) continue de fonctionner comme avant (1er = max, décroissant) — le sélecteur "Mode de points" doit correctement forcer ce mode et masquer les deux autres
+- [ ] Une manche en mode buzzer n'affiche pas le sélecteur "Mode de points" (pas de sens en buzzer, jugement oral par le GM) et fonctionne comme avant
+
+### 14.6 Vue GM (host-live)
+- [ ] "Question en cours" liste chaque réponse attendue (variantes + points si mode personnalisé) au lieu de l'ancienne ligne unique "Réponses acceptées : ..."
+
+---
+
+## 15. Manche Choix Multiple / QCM (lot 2 — pas testé manuellement, à valider en priorité)
+
+Aucun test manuel fait à ce stade — uniquement `dotnet build`/`npx ng build` propres. Nouvelle feature
+`multiple-choice`, aucune migration EF (payload/config JSON comme toutes les autres features).
+
+### 15.1 Création et affichage
+- [ ] La feature "Choix Multiple" apparaît dans le sélecteur de features à la création d'une manche
+- [ ] Éditeur de manche : réglage temps de réponse, auto-advance, mode de points (Uniforme/Personnalisé), champ points si Uniforme
+- [ ] Éditeur de question : ajouter/retirer des options, cocher "Correcte" sur plusieurs d'entre elles, champ points par option si mode Personnalisé
+- [ ] Côté joueur, les options apparaissent dans un ordre mélangé (pas l'ordre de saisie de l'éditeur) et sans jamais révéler lesquelles sont correctes avant de répondre
+
+### 15.2 Plafond de sélection (anti-triche)
+- [ ] Créer une question à 3 options dont 2 correctes → côté joueur, impossible de cocher une 3e case (les cases non cochées se désactivent visuellement une fois le plafond atteint) ; décocher reste toujours possible
+- [ ] Envoyer directement à l'API une sélection dépassant le plafond (contournement du plafond côté client, ex. via un appel réseau manuel) → réponse rejetée (`isCorrect: false`, `0 point`), jamais de crédit partiel dans ce cas
+
+### 15.3 Scoring
+- [ ] Mode Uniforme : cocher exactement les bonnes réponses → tous les points (barème uniforme × nombre de bonnes réponses), marqué "Correcte"
+- [ ] Mode Uniforme : cocher seulement une partie des bonnes réponses (sans dépasser le plafond) → crédit partiel (barème × nombre de bonnes réponses cochées), marqué "Incorrecte" (pas l'ensemble exact)
+- [ ] Mode Personnalisé : configurer une question à 3 réponses correctes avec des points différents (ex: 1, 2, 3 pts) → cocher seulement celle à 2 points → 2 points reçus, pas 1 ni 3
+- [ ] Cocher une combinaison incluant une option incorrecte (mais restant sous le plafond) → l'option incorrecte ne rapporte rien, mais les correctes cochées rapportent quand même leurs points ; jamais marqué "Correcte" (ensemble pas exact)
+
+### 15.4 Non-régression
+- [ ] Les autres types de manches ne sont pas affectés (le QCM n'a pas de buzzer/retry/validation manuelle — vérifier qu'aucune de ces options n'apparaît dans son éditeur, contrairement à qa-text)
+
+### 15.5 Vue GM (host-live)
+- [ ] "Question en cours" liste chaque option avec sa correction (✓/✕) et ses points si correcte et mode personnalisé
+
+---
+
+## 16. Outils host — tirage aléatoire et sondage (lot 3 — pas testé manuellement, à valider en priorité)
+
+Aucun test manuel fait à ce stade — uniquement `dotnet build`/`npx ng build` propres. Nouvelles tables
+(`RandomDrawStates`, `RandomDrawGuesses`, `StrawPollStates`, `StrawPollVotes`), première vraie migration
+EF depuis order-list — vérifier qu'elle s'est bien appliquée (`dotnet ef database update` ou démarrage en
+Development, qui migre automatiquement).
+
+### 16.1 Indépendance vis-à-vis de l'état de la partie
+- [ ] Déclencher un tirage aléatoire ou un sondage pendant le lobby, entre deux questions, pendant une pause — fonctionne dans tous les cas, sans perturber la question/manche en cours
+- [ ] Un seul outil actif à la fois : tenter de lancer un second outil (tirage ou sondage) pendant qu'un premier est actif → refusé, message clair côté host
+
+### 16.2 Tirage aléatoire — mode Reveal
+- [ ] Lancer un tirage en mode "Affichage direct" → la valeur est tirée et affichée immédiatement à tous les joueurs concernés (et à l'hôte), aucune phase de devinette
+- [ ] "Qui est concerné" via le sélecteur de participants (joueurs ou équipes) → seuls les joueurs concernés voient l'overlay côté joueur ; les autres ne voient rien
+
+### 16.3 Tirage aléatoire — modes Guess
+- [ ] Mode "Deviner — un gagnant" avec 2+ joueurs concernés : chacun envoie une devinette dans les bornes Min/Max, l'hôte voit le décompte de devinettes reçues (pas les valeurs) avant de révéler
+- [ ] Cliquer "Révéler" → tire la valeur, calcule le classement par proximité, le joueur le plus proche est marqué gagnant (`isWinner`)
+- [ ] Égalité entre 2 devinettes équidistantes → les deux partagent le même rang (classement "olympique"), toutes deux marquées gagnantes si rang 0
+- [ ] Mode "Deviner — classement complet" : mêmes mécanismes, mais tous les participants sont classés (pas seulement un gagnant)
+- [ ] Une devinette hors des bornes Min/Max est rejetée côté serveur
+- [ ] Un joueur non concerné qui tente d'envoyer une devinette est rejeté (403)
+
+### 16.4 Sondage (strawpoll)
+- [ ] Créer un sondage à vote unique (2+ options) → chaque joueur concerné ne peut cocher qu'une seule option ; en cochant une autre, la précédente se décoche
+- [ ] Créer un sondage à votes multiples → un joueur peut cocher plusieurs options
+- [ ] Avant révélation : ni les joueurs ni l'hôte ne voient le décompte (seulement qui a déjà voté)
+- [ ] Cliquer "Révéler les résultats" (hôte) → le décompte par option apparaît pour tout le monde
+- [ ] Un joueur peut revoter (change d'avis) tant que les résultats ne sont pas révélés — son vote précédent est remplacé, pas cumulé
+- [ ] Voter à nouveau après la révélation des résultats est rejeté
+
+### 16.5 Fermeture et non-régression
+- [ ] "Fermer" (hôte) sur un outil actif → il disparaît immédiatement côté host ET côté joueurs (overlay se ferme), un nouvel outil peut être lancé
+- [ ] Le déroulement normal d'une manche (qa-text, order-list, etc.) n'est pas affecté par la présence de ces nouvelles tables/DTOs
+
+---
+
 ## Environnements à couvrir
 
 - [ ] Un passage complet en **local** (`dotnet run` + `ng serve`) avant de considérer que c'est bon

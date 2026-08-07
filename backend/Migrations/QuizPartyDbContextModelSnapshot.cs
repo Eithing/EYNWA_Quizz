@@ -245,6 +245,80 @@ namespace QuizParty.Api.Migrations
                     b.ToTable("Quizzes");
                 });
 
+            modelBuilder.Entity("QuizParty.Api.Models.RandomDrawGuess", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GuessValue")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RandomDrawStateId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayerId");
+
+                    b.HasIndex("RandomDrawStateId", "PlayerId")
+                        .IsUnique();
+
+                    b.ToTable("RandomDrawGuesses");
+                });
+
+            modelBuilder.Entity("QuizParty.Api.Models.RandomDrawState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ConcernedPlayerIdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DrawnValue")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsResolved")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MaxValue")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MinValue")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("RandomDrawStates");
+                });
+
             modelBuilder.Entity("QuizParty.Api.Models.Round", b =>
                 {
                     b.Property<int>("Id")
@@ -352,6 +426,75 @@ namespace QuizParty.Api.Migrations
                     b.HasIndex("TeamId");
 
                     b.ToTable("ScoreAdjustments");
+                });
+
+            modelBuilder.Entity("QuizParty.Api.Models.StrawPollState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AllowMultipleVotes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ConcernedPlayerIdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OptionsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ResultsRevealed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("StrawPollStates");
+                });
+
+            modelBuilder.Entity("QuizParty.Api.Models.StrawPollVote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OptionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("StrawPollStateId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayerId");
+
+                    b.HasIndex("StrawPollStateId", "PlayerId", "OptionId")
+                        .IsUnique();
+
+                    b.ToTable("StrawPollVotes");
                 });
 
             modelBuilder.Entity("QuizParty.Api.Models.Team", b =>
@@ -487,6 +630,36 @@ namespace QuizParty.Api.Migrations
                     b.Navigation("Owner");
                 });
 
+            modelBuilder.Entity("QuizParty.Api.Models.RandomDrawGuess", b =>
+                {
+                    b.HasOne("QuizParty.Api.Models.Player", "Player")
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QuizParty.Api.Models.RandomDrawState", "RandomDrawState")
+                        .WithMany("Guesses")
+                        .HasForeignKey("RandomDrawStateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Player");
+
+                    b.Navigation("RandomDrawState");
+                });
+
+            modelBuilder.Entity("QuizParty.Api.Models.RandomDrawState", b =>
+                {
+                    b.HasOne("QuizParty.Api.Models.GameSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("QuizParty.Api.Models.Round", b =>
                 {
                     b.HasOne("QuizParty.Api.Models.Round", "Parent")
@@ -562,6 +735,36 @@ namespace QuizParty.Api.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("QuizParty.Api.Models.StrawPollState", b =>
+                {
+                    b.HasOne("QuizParty.Api.Models.GameSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("QuizParty.Api.Models.StrawPollVote", b =>
+                {
+                    b.HasOne("QuizParty.Api.Models.Player", "Player")
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QuizParty.Api.Models.StrawPollState", "StrawPollState")
+                        .WithMany("Votes")
+                        .HasForeignKey("StrawPollStateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Player");
+
+                    b.Navigation("StrawPollState");
+                });
+
             modelBuilder.Entity("QuizParty.Api.Models.Team", b =>
                 {
                     b.HasOne("QuizParty.Api.Models.GameSession", "Session")
@@ -609,11 +812,21 @@ namespace QuizParty.Api.Migrations
                     b.Navigation("Rounds");
                 });
 
+            modelBuilder.Entity("QuizParty.Api.Models.RandomDrawState", b =>
+                {
+                    b.Navigation("Guesses");
+                });
+
             modelBuilder.Entity("QuizParty.Api.Models.Round", b =>
                 {
                     b.Navigation("Questions");
 
                     b.Navigation("SubRounds");
+                });
+
+            modelBuilder.Entity("QuizParty.Api.Models.StrawPollState", b =>
+                {
+                    b.Navigation("Votes");
                 });
 
             modelBuilder.Entity("QuizParty.Api.Models.Team", b =>

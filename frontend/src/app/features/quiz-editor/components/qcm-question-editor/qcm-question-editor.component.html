@@ -1,0 +1,14 @@
+<div class="qcm-question-editor">
+  <div class="form-field">
+    <label for="qcm-question-text">Question</label>
+    <textarea
+      id="qcm-question-text"
+      rows="3"
+      placeholder="Ex : Lesquelles de ces villes sont des capitales ?"
+      [value]="payload().questionText"
+      (input)="onQuestionTextChange($any($event.target).value)"
+    ></textarea>
+  </div>
+
+  <app-qcm-options-editor [options]="payload().options" [configJson]="configJson()" (optionsChange)="onOptionsChange($event)" />
+</div>

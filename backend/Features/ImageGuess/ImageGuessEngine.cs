@@ -31,14 +31,23 @@ public class ImageGuessEngine : QaEngine
             return new FeatureAnswerEvaluation(null, 0);
         }
 
-        var isCorrect = payload.AcceptedAnswers.Any(accepted => AnswerMatcher.IsMatch(accepted, rawAnswer));
-        return new FeatureAnswerEvaluation(isCorrect, isCorrect ? config.Points : 0);
+        var expectedAnswers = payload.ExpectedAnswersOrLegacy();
+        var submittedAnswers = ExpectedAnswerMatching.SplitRawAnswer(rawAnswer, expectedAnswers.Count);
+        var result = ExpectedAnswerMatching.Match(expectedAnswers, submittedAnswers, e => EffectivePoints(e, config.Points));
+
+        return new FeatureAnswerEvaluation(result.AllMatched, result.PointsAwarded);
     }
 
-    public override string BuildPublicPayloadJson(string payloadJson)
+    public override string BuildPublicPayloadJson(string payloadJson) => BuildPublicPayloadJson(payloadJson, "{}");
+
+    public override string BuildPublicPayloadJson(string payloadJson, string configJson)
     {
         var payload = ParsePayload(payloadJson);
-        return JsonSerializer.Serialize(new { imageUrl = payload.ImageUrl }, PublicJsonOptions);
+        var (count, points) = BuildExpectedAnswerFields(payload.ExpectedAnswersOrLegacy(), ParseConfig(configJson).Points);
+
+        return JsonSerializer.Serialize(
+            new { imageUrl = payload.ImageUrl, expectedAnswerCount = count, expectedAnswerPoints = points },
+            PublicJsonOptions);
     }
 
     private static ImageGuessQuestionPayload ParsePayload(string payloadJson) =>

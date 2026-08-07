@@ -55,6 +55,8 @@
       <app-closest-guess-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
     } @else if (isOrderList()) {
       <app-order-list-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
+    } @else if (isQcm()) {
+      <app-qcm-round-config [configJson]="round().configJson" (configJsonChange)="onConfigJsonChange($event)" />
     } @else {
       <div class="form-field">
         <label for="round-config">
@@ -84,21 +86,25 @@
           @if (isZoomImage()) {
             <app-zoom-question-editor
               [payloadJson]="question.payloadJson"
+              [configJson]="round().configJson"
               (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
             />
           } @else if (isQaText()) {
             <app-qa-question-editor
               [payloadJson]="question.payloadJson"
+              [configJson]="round().configJson"
               (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
             />
           } @else if (isBlindTest()) {
             <app-blind-test-question-editor
               [payloadJson]="question.payloadJson"
+              [configJson]="round().configJson"
               (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
             />
           } @else if (isImageGuess()) {
             <app-image-guess-question-editor
               [payloadJson]="question.payloadJson"
+              [configJson]="round().configJson"
               (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
             />
           } @else if (isClosestGuess()) {
@@ -114,6 +120,12 @@
           } @else if (isOrderList()) {
             <app-order-list-question-editor
               [payloadJson]="question.payloadJson"
+              (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
+            />
+          } @else if (isQcm()) {
+            <app-qcm-question-editor
+              [payloadJson]="question.payloadJson"
+              [configJson]="round().configJson"
               (payloadJsonChange)="onQuestionPayloadChange(question.clientId, $event)"
             />
           } @else {

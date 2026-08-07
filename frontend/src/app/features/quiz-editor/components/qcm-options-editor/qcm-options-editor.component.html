@@ -1,0 +1,46 @@
+<div class="qcm-options-editor">
+  <label>Options ({{ correctCount() }} bonne{{ correctCount() > 1 ? 's' : '' }} réponse{{ correctCount() > 1 ? 's' : '' }})</label>
+
+  <ol class="qcm-options-editor__list">
+    @for (option of options(); track option.id; let i = $index) {
+      <li class="qcm-options-editor__item" [class.qcm-options-editor__item--correct]="option.isCorrect">
+        <span class="qcm-options-editor__index">{{ i + 1 }}</span>
+
+        <input
+          type="text"
+          class="qcm-options-editor__content"
+          placeholder="Contenu de l'option"
+          [value]="option.content"
+          (input)="onContentChange(i, $any($event.target).value)"
+        />
+
+        <label class="qcm-options-editor__correct-toggle">
+          <input type="checkbox" [checked]="option.isCorrect" (change)="onIsCorrectChange(i, $any($event.target).checked)" />
+          Correcte
+        </label>
+
+        @if (option.isCorrect && pointsMode() === 'PerAnswer') {
+          <input
+            type="number"
+            class="qcm-options-editor__points"
+            placeholder="Points"
+            min="0"
+            [value]="option.points"
+            (input)="onPointsChange(i, $any($event.target).valueAsNumber)"
+          />
+        }
+
+        <button type="button" class="qcm-options-editor__remove" title="Retirer cette option" (click)="removeOption(i)">✕</button>
+      </li>
+    } @empty {
+      <p class="qcm-options-editor__empty">Aucune option pour l'instant.</p>
+    }
+  </ol>
+
+  <button type="button" class="btn btn-secondary" (click)="addOption()">+ Ajouter une option</button>
+
+  <p class="qcm-options-editor__hint">
+    Le joueur ne pourra jamais cocher plus de {{ correctCount() }} option{{ correctCount() > 1 ? 's' : '' }}
+    (le nombre de bonnes réponses) — ce plafond empêche de tout cocher pour garantir les points.
+  </p>
+</div>

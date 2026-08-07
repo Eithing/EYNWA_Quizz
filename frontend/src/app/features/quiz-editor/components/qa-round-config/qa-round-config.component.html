@@ -26,7 +26,7 @@
       />
     </div>
 
-    @if (!config().rankBasedScoring) {
+    @if (scoringMode() === 'Fixed') {
       <div class="form-field">
         <label for="qa-points">Points par bonne réponse</label>
         <input
@@ -41,12 +41,16 @@
   </div>
 
   @if (!config().buzzerMode) {
-    <label class="qa-round-config__checkbox">
-      <input type="checkbox" [checked]="config().rankBasedScoring" (change)="onRankBasedScoringChange($any($event.target).checked)" />
-      Points dégressifs selon l'ordre d'arrivée (1er = max, puis -X par rang)
-    </label>
+    <div class="form-field">
+      <label for="qa-scoring-mode">Mode de points</label>
+      <select id="qa-scoring-mode" [value]="scoringMode()" (change)="onScoringModeChange($any($event.target).value)">
+        <option value="Fixed">Points fixes</option>
+        <option value="RankBased">Dégressifs selon l'ordre d'arrivée (1er = max, puis -X par rang)</option>
+        <option value="PerAnswer">Personnalisés par réponse (réglé question par question)</option>
+      </select>
+    </div>
 
-    @if (config().rankBasedScoring) {
+    @if (scoringMode() === 'RankBased') {
       <div class="qa-round-config__row">
         <div class="form-field">
           <label for="qa-rank-max-points">Points du 1er</label>
@@ -70,6 +74,13 @@
           />
         </div>
       </div>
+    }
+
+    @if (scoringMode() === 'PerAnswer') {
+      <p class="qa-round-config__hint">
+        Chaque question peut désormais attendre plusieurs réponses distinctes, chacune avec son propre
+        nombre de points — à régler directement dans l'éditeur de chaque question.
+      </p>
     }
   }
 

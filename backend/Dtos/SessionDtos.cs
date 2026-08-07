@@ -16,6 +16,44 @@ public record ThemeBoardEntryDto(int SubRoundId, string Title, bool IsRevealed, 
 /// ordre en train d'être réarrangé.</summary>
 public record OrderListGroupStateDto(string GroupLabel, List<string> CurrentOrder, bool IsResolved, int? PointsAwarded);
 
+/// <summary>Devinette résolue d'un joueur pour un tirage aléatoire — Rank en classement "olympique" (des
+/// égalités partagent le même rang, le suivant saute d'autant), IsWinner vrai pour tout le rang 0.</summary>
+public record RandomDrawResultEntryDto(int PlayerId, string PlayerPseudo, int GuessValue, int Rank, bool IsWinner);
+
+/// <summary>Outil host "tirage aléatoire" actif pour la session (un seul à la fois, indépendant de
+/// GameSessionStatus) — Results reste null tant que non résolu (Reveal : résolu immédiatement à la
+/// création ; Guess* : résolu via /random-draw/reveal). SubmittedPlayerIds : qui a déjà deviné, jamais ce
+/// qu'il a deviné avant résolution (ce DTO est partagé par tous les viewers, pas de fetch par joueur).</summary>
+public record RandomDrawStateDto(
+    int Id,
+    string Mode,
+    string Label,
+    int MinValue,
+    int MaxValue,
+    /// <summary>Vide = tout le monde concerné.</summary>
+    List<int> ConcernedPlayerIds,
+    List<int> SubmittedPlayerIds,
+    bool IsResolved,
+    int? DrawnValue,
+    List<RandomDrawResultEntryDto>? Results);
+
+public record StrawPollOptionDto(string Id, string Text);
+
+public record StrawPollResultDto(string OptionId, int VoteCount);
+
+/// <summary>Outil host "sondage" actif pour la session — même principe de gating que ScoreboardVisible :
+/// Results reste null tant que ResultsRevealed est faux, même côté host (DTO partagé, pas de bypass).</summary>
+public record StrawPollStateDto(
+    int Id,
+    string Question,
+    List<StrawPollOptionDto> Options,
+    bool AllowMultipleVotes,
+    /// <summary>Vide = tout le monde concerné.</summary>
+    List<int> ConcernedPlayerIds,
+    List<int> VotedPlayerIds,
+    bool ResultsRevealed,
+    List<StrawPollResultDto>? Results);
+
 public record GameSessionStateDto(
     int SessionId,
     string InviteToken,
@@ -35,7 +73,11 @@ public record GameSessionStateDto(
     List<ThemeBoardEntryDto>? ThemeBoard,
     /// <summary>Manche "à quoi pense l'autre" : joueur désigné pour répondre en privé à la question courante.</summary>
     int? CurrentAnswererPlayerId,
-    string? CurrentAnswererPseudo);
+    string? CurrentAnswererPseudo,
+    /// <summary>Outil host actif, indépendant de Status — null si aucun tirage en cours.</summary>
+    RandomDrawStateDto? ActiveRandomDraw = null,
+    /// <summary>Outil host actif, indépendant de Status — null si aucun sondage en cours.</summary>
+    StrawPollStateDto? ActiveStrawPoll = null);
 
 public record CurrentQuestionAdminDto(
     int RoundId,
@@ -122,3 +164,14 @@ public record SetPartnerGuessAnswererRequest(int PlayerId);
 
 /// <summary>Aperçu GM d'une manche pas encore démarrée (ex: avant de désigner les participants), pour savoir sur quoi elle porte.</summary>
 public record RoundPreviewDto(string RoundTitle, string FeatureTypeKey, string? FirstQuestionPayloadJson);
+
+/// <summary>Mode : "Reveal" | "GuessWinner" | "GuessRanking". PlayerIds/TeamIds vides = tout le monde
+/// concerné (contrairement à SetRoundParticipantsRequest, vide est ici une valeur valide).</summary>
+public record StartRandomDrawRequest(string Mode, string Label, int MinValue, int MaxValue, List<int> PlayerIds, List<int> TeamIds);
+
+public record RandomDrawGuessRequest(Guid ConnectionToken, int GuessValue);
+
+/// <summary>PlayerIds/TeamIds vides = tout le monde concerné.</summary>
+public record StartStrawPollRequest(string Question, List<string> Options, bool AllowMultipleVotes, List<int> PlayerIds, List<int> TeamIds);
+
+public record StrawPollVoteRequest(Guid ConnectionToken, List<string> OptionIds);

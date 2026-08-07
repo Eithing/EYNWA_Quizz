@@ -24,14 +24,9 @@
     }
   </div>
 
-  <div class="form-field">
-    <label for="accepted-answers">Réponses acceptées (séparées par des virgules)</label>
-    <input
-      id="accepted-answers"
-      type="text"
-      placeholder="Ex : Zelda, The Legend of Zelda"
-      [value]="acceptedAnswersText()"
-      (input)="onAcceptedAnswersChange($any($event.target).value)"
-    />
-  </div>
+  <app-expected-answers-editor
+    [expectedAnswers]="payload().expectedAnswers"
+    [pointsMode]="pointsMode()"
+    (expectedAnswersChange)="onExpectedAnswersChange($event)"
+  />
 </div>
