@@ -7,6 +7,11 @@ import {
   AnswerFeedItem,
   CurrentQuestionAdmin,
   GameSessionState,
+  JOKER_ICONS,
+  JOKER_LABELS,
+  JOKER_TYPES,
+  JokerType,
+  JokerUsedEvent,
   Player,
   RandomDrawMode,
   RoundPreview,
@@ -21,6 +26,12 @@ const POLL_INTERVAL_MS = 1000;
 interface TeamDraft {
   name: string;
   playerIds: Set<number>;
+}
+
+interface JokerOwner {
+  kind: 'player' | 'team';
+  id: number;
+  label: string;
 }
 
 @Component({
@@ -48,6 +59,24 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected readonly teamBuilderOpen = signal(false);
   protected readonly teamDrafts = signal<TeamDraft[]>([]);
+
+  protected readonly jokerTypes = JOKER_TYPES;
+  protected readonly jokerLabels = JOKER_LABELS;
+  protected readonly jokerIcons = JOKER_ICONS;
+  protected readonly jokerEditorOpen = signal(false);
+  /** Clé "kind:id:type" -> charges en cours d'édition (pas encore enregistrées). */
+  protected readonly jokerDraftCharges = signal<Record<string, number>>({});
+  protected readonly jokerToast = signal<JokerUsedEvent | null>(null);
+
+  protected readonly jokerOwners = computed<JokerOwner[]>(() => {
+    const s = this.state();
+    if (!s) {
+      return [];
+    }
+    return s.teams.length > 0
+      ? s.teams.map((t) => ({ kind: 'team' as const, id: t.id, label: t.name }))
+      : s.players.map((p) => ({ kind: 'player' as const, id: p.id, label: p.pseudo }));
+  });
 
   protected readonly themeSelectorOpenId = signal<number | null>(null);
   protected readonly partnerGuessSelectorOpen = signal(false);
@@ -264,6 +293,30 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     return board.length > 0 && board.every((t) => t.resolution !== 'Pending');
   });
 
+  /// Thème en attente de lancement (statut ThemeReadyToLaunch) : le seul du plateau révélé mais encore
+  /// non résolu — voir le commentaire de ChooseTheme côté backend, ThemeReadyToLaunch ne peut désigner
+  /// qu'un seul thème à la fois.
+  protected readonly readyToLaunchTheme = computed(() => {
+    const s = this.state();
+    return s?.themeBoard?.find((t) => t.isRevealed && t.resolution === 'Pending') ?? null;
+  });
+
+  protected readonly participantNames = computed(() => {
+    const s = this.state();
+    if (!s) {
+      return null;
+    }
+    if (s.currentRoundParticipantTeamIds.length > 0) {
+      const names = s.teams.filter((t) => s.currentRoundParticipantTeamIds.includes(t.id)).map((t) => t.name);
+      return names.length > 0 ? names.join(', ') : null;
+    }
+    if (s.currentRoundParticipantPlayerIds.length > 0) {
+      const names = s.players.filter((p) => s.currentRoundParticipantPlayerIds.includes(p.id)).map((p) => p.pseudo);
+      return names.length > 0 ? names.join(', ') : null;
+    }
+    return null;
+  });
+
   protected readonly participantBanner = computed(() => {
     const s = this.state();
     if (!s) {
@@ -349,6 +402,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
         this.refreshAnswerFeed();
       });
       this.signalrService.onAnswerPendingValidation(() => this.refreshAnswerFeed());
+      this.signalrService.onJokerUsed((event) => {
+        this.jokerToast.set(event);
+        setTimeout(() => this.jokerToast.set(null), 4000);
+      });
     });
 
     // Filet de sécurité indépendant de SignalR : si un message temps réel est manqué, l'écran
@@ -371,6 +428,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected teamName(teamId: number | null): string {
     return this.state()?.teams.find((t) => t.id === teamId)?.name ?? '';
+  }
+
+  protected playerPseudo(playerId: number | null): string {
+    return this.state()?.players.find((p) => p.id === playerId)?.pseudo ?? '';
   }
 
   protected get inviteUrl(): string {
@@ -652,6 +713,55 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     });
   }
 
+  private jokerDraftKey(owner: JokerOwner, type: JokerType): string {
+    return `${owner.kind}:${owner.id}:${type}`;
+  }
+
+  protected openJokerEditor(): void {
+    const grants = this.state()?.jokerGrants ?? [];
+    const draft: Record<string, number> = {};
+
+    for (const owner of this.jokerOwners()) {
+      for (const type of this.jokerTypes) {
+        const existing = grants.find(
+          (g) => g.type === type && (owner.kind === 'player' ? g.ownerPlayerId === owner.id : g.ownerTeamId === owner.id)
+        );
+        draft[this.jokerDraftKey(owner, type)] = existing?.charges ?? 0;
+      }
+    }
+
+    this.jokerDraftCharges.set(draft);
+    this.jokerEditorOpen.set(true);
+  }
+
+  protected cancelJokerEditor(): void {
+    this.jokerEditorOpen.set(false);
+  }
+
+  protected jokerDraftValue(owner: JokerOwner, type: JokerType): number {
+    return this.jokerDraftCharges()[this.jokerDraftKey(owner, type)] ?? 0;
+  }
+
+  protected setJokerDraftValue(owner: JokerOwner, type: JokerType, value: number): void {
+    this.jokerDraftCharges.update((draft) => ({ ...draft, [this.jokerDraftKey(owner, type)]: Math.max(0, value) }));
+  }
+
+  protected saveJokerGrants(): void {
+    const grants = this.jokerOwners().flatMap((owner) =>
+      this.jokerTypes.map((type) => ({
+        type,
+        playerId: owner.kind === 'player' ? owner.id : null,
+        teamId: owner.kind === 'team' ? owner.id : null,
+        charges: this.jokerDraftValue(owner, type)
+      }))
+    );
+
+    this.sessionService.setJokerGrants(this.sessionId, grants).subscribe((state) => {
+      this.applyState(state);
+      this.jokerEditorOpen.set(false);
+    });
+  }
+
   protected toggleThemeSelector(subRoundId: number): void {
     this.themeSelectorOpenId.update((current) => (current === subRoundId ? null : subRoundId));
   }
@@ -665,6 +775,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected skipTheme(subRoundId: number): void {
     this.sessionService.skipTheme(this.sessionId, subRoundId).subscribe((state) => this.applyState(state));
+  }
+
+  protected launchTheme(subRoundId: number): void {
+    this.sessionService.launchTheme(this.sessionId, subRoundId).subscribe((state) => this.applyState(state));
   }
 
   protected revealAllThemes(): void {

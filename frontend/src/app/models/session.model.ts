@@ -7,6 +7,7 @@ export type GameSessionStatus =
   | 'ChoosingTheme'
   | 'AwaitingAnswerer'
   | 'AwaitingTeamMode'
+  | 'ThemeReadyToLaunch'
   | 'Finished';
 
 export interface Player {
@@ -35,6 +36,43 @@ export interface ThemeBoardEntry {
   title: string;
   isRevealed: boolean;
   resolution: ThemeResolution;
+}
+
+export type JokerType = 'Exchange' | 'AloneInTheWorld' | 'CopyPaste' | 'MeFirst' | 'FiftyFifty';
+
+export const JOKER_TYPES: JokerType[] = ['Exchange', 'AloneInTheWorld', 'CopyPaste', 'MeFirst', 'FiftyFifty'];
+
+export const JOKER_LABELS: Record<JokerType, string> = {
+  Exchange: 'Échange',
+  AloneInTheWorld: 'Seul au monde',
+  CopyPaste: 'Copier/coller',
+  MeFirst: "Moi d'abord",
+  FiftyFifty: 'Cinquante-cinquante'
+};
+
+export const JOKER_ICONS: Record<JokerType, string> = {
+  Exchange: '🔄',
+  AloneInTheWorld: '🏝️',
+  CopyPaste: '📋',
+  MeFirst: '🏎️',
+  FiftyFifty: '5️⃣0️⃣'
+};
+
+/** Stock de charges d'un joker attribué à un joueur OU une équipe (jamais les deux). */
+export interface JokerGrant {
+  id: number;
+  type: JokerType;
+  ownerPlayerId: number | null;
+  ownerTeamId: number | null;
+  charges: number;
+}
+
+/** Toast temps réel diffusé à l'utilisation d'un joker (événement SignalR "JokerUsed"). */
+export interface JokerUsedEvent {
+  type: JokerType;
+  actorLabel: string;
+  targetLabel: string | null;
+  detail: string | null;
 }
 
 export type RandomDrawMode = 'Reveal' | 'GuessWinner' | 'GuessRanking';
@@ -111,6 +149,18 @@ export interface GameSessionState {
   activeRandomDraw: RandomDrawState | null;
   /** Outil host actif, indépendant de status — null si aucun sondage en cours. */
   activeStrawPoll: StrawPollState | null;
+  /** Inventaire complet des jokers de la session — chaque client filtre localement ce qui le concerne. */
+  jokerGrants: JokerGrant[];
+  /** Joker Seul au monde : détenteur sur la question courante, null si aucun. */
+  aloneInTheWorldPlayerId: number | null;
+  aloneInTheWorldTeamId: number | null;
+  /** Joker Moi d'abord : détenteur du verrou buzzer courant. */
+  meFirstHolderPlayerId: number | null;
+  meFirstHolderTeamId: number | null;
+  meFirstQuestionsRemaining: number;
+  /** Vrai dès que le détenteur a buzzé sur la question courante — le verrou ne bloque alors plus les
+   * autres joueurs pour le reste de cette question (retry classique). */
+  meFirstConsumedThisQuestion: boolean;
 }
 
 export interface CurrentQuestionAdmin {

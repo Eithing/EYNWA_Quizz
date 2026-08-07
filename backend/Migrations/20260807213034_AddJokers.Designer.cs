@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using QuizParty.Api.Data;
 
@@ -10,9 +11,11 @@ using QuizParty.Api.Data;
 namespace QuizParty.Api.Migrations
 {
     [DbContext(typeof(QuizPartyDbContext))]
-    partial class QuizPartyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807213034_AddJokers")]
+    partial class AddJokers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -173,9 +176,6 @@ namespace QuizParty.Api.Migrations
                     b.Property<string>("InviteToken")
                         .IsRequired()
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("MeFirstConsumedThisQuestion")
-                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("MeFirstHolderPlayerId")
                         .HasColumnType("INTEGER");

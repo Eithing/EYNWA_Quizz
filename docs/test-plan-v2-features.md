@@ -394,6 +394,56 @@ calcul des points** (dézoom dégressif vs montant fixe par réponse) — à tes
 
 ---
 
+## 18. Jokers (lot 4 — pas testé manuellement, à valider en priorité)
+
+Aucun test manuel fait à ce stade. 5 jokers (Échange, Seul au monde, Copier/coller, Moi d'abord,
+Cinquante-cinquante), attribution en lobby, toast temps réel "JokerUsed" côté joueurs ET host. Deux
+migrations EF (`AddJokers`, `AddMeFirstConsumedFlag`) — vérifier qu'elles se sont bien appliquées.
+
+### 18.1 Attribution en lobby
+- [ ] Carte "Jokers" visible en lobby uniquement ; attribuer des charges à un joueur (session sans équipe) → persistées, résumé correct après "Enregistrer"
+- [ ] Créer des équipes puis rouvrir la carte Jokers → l'attribution bascule automatiquement sur les équipes (plus les joueurs individuels)
+- [ ] Un joueur ne voit dans son tiroir de jokers QUE ce qui lui appartient (ou appartient à son équipe) — jamais les jokers des autres
+- [ ] Aucun joker attribué → aucune carte/tiroir affiché nulle part, partie jouable normalement
+
+### 18.2 Cinquante-cinquante
+- [ ] QCM à 4 options (2 bonnes, 2 mauvaises) : le joueur qui utilise le joker ne voit plus qu'une des deux mauvaises ; les autres joueurs voient toujours les 4 ; le plafond de sélection reste inchangé
+- [ ] QCM à moins de 2 mauvaises réponses → joker refusé proprement (message clair, pas de crash)
+- [ ] Utiliser deux fois sur la même question → refusé après le premier usage
+
+### 18.3 Moi d'abord
+- [ ] Thème en mode buzzer, un joueur utilise le joker → les autres ne peuvent pas buzzer tant qu'il n'a pas répondu (bouton grisé + message côté joueur)
+- [ ] Sa réponse jugée fausse par l'hôte → tout le monde peut re-buzzer normalement (retry classique) pour LE RESTE de cette question
+- [ ] Le verrou se réapplique sur la question suivante (2ᵉ des 2 couvertes), puis disparaît complètement à la 3ᵉ
+- [ ] Un second joueur ne peut pas utiliser Moi d'abord tant qu'un verrou est déjà actif
+
+### 18.4 Seul au monde
+- [ ] Question à plusieurs joueurs (qa-text ou QCM) : certains répondent AVANT l'utilisation du joker, d'autres APRÈS → tous à 0 point sauf l'utilisateur, verdict individuel (juste/faux) inchangé pour chacun
+- [ ] Le joueur qui a utilisé le joker reçoit bien ses points normalement
+- [ ] Utilisé deux fois sur la même question (par deux joueurs différents) → le second refusé
+- [ ] Non utilisable sur closest-guess/partner-guess (pas dans le tiroir, refusé si forcé)
+
+### 18.5 Copier/coller
+- [ ] Joueur A cible joueur B avant que B ait répondu → à la fermeture de la fenêtre, A a exactement la même réponse/verdict/points que B
+- [ ] B n'a jamais répondu → A reste sans réponse (pas de crash, pas de faux "correct")
+- [ ] A ne voit à aucun moment le contenu de la réponse de B avant la fermeture de la fenêtre
+- [ ] Fonctionne sur order-list (dont la finalisation est indépendante — vérifier que la copie prend bien le résultat déjà finalisé de B, pas un état intermédiaire)
+
+### 18.6 Échange
+- [ ] Manche à thèmes : le GM désigne un thème pour le joueur X → statut passe à "en attente de lancement", le minuteur ne démarre PAS encore, X et les autres joueurs voient qui est désigné
+- [ ] Joueur Y (non désigné) utilise Échange → les participants du thème deviennent Y (X n'est plus désigné)
+- [ ] X (maintenant non désigné) pourrait à son tour voler avec un autre Échange si le GM n'a pas encore lancé
+- [ ] Le GM clique "Lancer le thème" → démarrage normal, minuteur lancé, plus de fenêtre de vol possible
+- [ ] Un joueur déjà désigné ne peut pas utiliser Échange sur son propre thème
+- [ ] Non-régression : une manche à thèmes SANS aucun joker Échange attribué se comporte comme avant, à l'exception de l'étape "Lancer" désormais toujours explicite (un clic de plus pour le GM, mais aucun blocage)
+
+### 18.7 Toast et non-régression générale
+- [ ] Chaque utilisation de joker déclenche un bandeau "X a utilisé [joker]" côté TOUS les joueurs ET côté host, avec la cible/le détail quand pertinent (Copier/coller, Échange)
+- [ ] Le bandeau disparaît automatiquement après quelques secondes
+- [ ] Un quiz/une session sans jokers du tout se comporte exactement comme avant ce lot
+
+---
+
 ## Environnements à couvrir
 
 - [ ] Un passage complet en **local** (`dotnet run` + `ng serve`) avant de considérer que c'est bon

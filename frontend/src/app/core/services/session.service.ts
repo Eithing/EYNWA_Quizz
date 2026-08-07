@@ -8,6 +8,7 @@ import {
   JoinSessionResponse,
   Player,
   PlayerQuestion,
+  JokerType,
   OrderSubmitResponse,
   RandomDrawMode,
   RoundPreview,
@@ -75,6 +76,10 @@ export class SessionService {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/themes/${subRoundId}/choose`, { playerIds, teamIds });
   }
 
+  launchTheme(sessionId: number, subRoundId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/themes/${subRoundId}/launch`, {});
+  }
+
   skipTheme(sessionId: number, subRoundId: number) {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/themes/${subRoundId}/skip`, {});
   }
@@ -122,6 +127,12 @@ export class SessionService {
       delta,
       reason
     });
+  }
+
+  // Jokers
+
+  setJokerGrants(sessionId: number, grants: { type: JokerType; playerId: number | null; teamId: number | null; charges: number }[]) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/jokers/grants`, { grants });
   }
 
   // Outils host (tirage aléatoire, sondage)
@@ -220,6 +231,14 @@ export class SessionService {
     return this.http.post<GameSessionState>(`${this.baseUrl}/by-token/${token}/strawpoll/vote`, {
       connectionToken,
       optionIds
+    });
+  }
+
+  useJoker(token: string, connectionToken: string, type: JokerType, targetPlayerId?: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/by-token/${token}/jokers/use`, {
+      connectionToken,
+      type,
+      targetPlayerId: targetPlayerId ?? null
     });
   }
 }

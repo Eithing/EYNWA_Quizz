@@ -54,6 +54,23 @@ public record StrawPollStateDto(
     bool ResultsRevealed,
     List<StrawPollResultDto>? Results);
 
+/// <summary>Stock de charges d'un joker attribué à un joueur OU une équipe (jamais les deux) — Type :
+/// "Exchange" | "AloneInTheWorld" | "CopyPaste" | "MeFirst" | "FiftyFifty". Diffusé pour toute la
+/// session (petite volumétrie) ; chaque client filtre localement ce qui le concerne.</summary>
+public record JokerGrantDto(int Id, string Type, int? OwnerPlayerId, int? OwnerTeamId, int Charges);
+
+public record JokerGrantInput(string Type, int? PlayerId, int? TeamId, int Charges);
+
+/// <summary>Remplace l'inventaire complet des jokers de la session — appelé depuis le lobby, peut être
+/// rappelé pour ajuster tant que la partie n'a pas démarré.</summary>
+public record SetJokerGrantsRequest(List<JokerGrantInput> Grants);
+
+public record UseJokerRequest(Guid ConnectionToken, string Type, int? TargetPlayerId);
+
+/// <summary>Toast temps réel diffusé à l'utilisation d'un joker (événement SignalR "JokerUsed", pas dans
+/// GameSessionStateDto — un pop-up ponctuel, pas un état à re-synchroniser).</summary>
+public record JokerUsedEventDto(string Type, string ActorLabel, string? TargetLabel, string? Detail);
+
 public record GameSessionStateDto(
     int SessionId,
     string InviteToken,
@@ -77,7 +94,19 @@ public record GameSessionStateDto(
     /// <summary>Outil host actif, indépendant de Status — null si aucun tirage en cours.</summary>
     RandomDrawStateDto? ActiveRandomDraw = null,
     /// <summary>Outil host actif, indépendant de Status — null si aucun sondage en cours.</summary>
-    StrawPollStateDto? ActiveStrawPoll = null);
+    StrawPollStateDto? ActiveStrawPoll = null,
+    /// <summary>Inventaire complet des jokers de la session — chaque client filtre localement ce qui le concerne.</summary>
+    List<JokerGrantDto>? JokerGrants = null,
+    /// <summary>Joker Seul au monde : détenteur sur la question courante, remis à null à chaque nouvelle question.</summary>
+    int? AloneInTheWorldPlayerId = null,
+    int? AloneInTheWorldTeamId = null,
+    /// <summary>Joker Moi d'abord : détenteur du verrou buzzer courant.</summary>
+    int? MeFirstHolderPlayerId = null,
+    int? MeFirstHolderTeamId = null,
+    int MeFirstQuestionsRemaining = 0,
+    /// <summary>Vrai dès que le détenteur a buzzé sur la question courante — le verrou ne bloque alors
+    /// plus les autres joueurs pour le reste de cette question (retry classique).</summary>
+    bool MeFirstConsumedThisQuestion = false);
 
 public record CurrentQuestionAdminDto(
     int RoundId,

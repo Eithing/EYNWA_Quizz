@@ -20,6 +20,10 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
     public DbSet<RandomDrawGuess> RandomDrawGuesses => Set<RandomDrawGuess>();
     public DbSet<StrawPollState> StrawPollStates => Set<StrawPollState>();
     public DbSet<StrawPollVote> StrawPollVotes => Set<StrawPollVote>();
+    public DbSet<JokerGrant> JokerGrants => Set<JokerGrant>();
+    public DbSet<JokerUsageEvent> JokerUsageEvents => Set<JokerUsageEvent>();
+    public DbSet<CopyPasteAssignment> CopyPasteAssignments => Set<CopyPasteAssignment>();
+    public DbSet<QcmFiftyFiftyReveal> QcmFiftyFiftyReveals => Set<QcmFiftyFiftyReveal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -231,6 +235,114 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
         // Un vote par joueur et par option (empêche un double-clic de compter deux fois la même option).
         modelBuilder.Entity<StrawPollVote>()
             .HasIndex(v => new { v.StrawPollStateId, v.PlayerId, v.OptionId })
+            .IsUnique();
+
+        modelBuilder.Entity<JokerGrant>()
+            .Property(g => g.Type)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<JokerGrant>()
+            .HasOne(g => g.Session)
+            .WithMany()
+            .HasForeignKey(g => g.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<JokerGrant>()
+            .HasOne(g => g.Player)
+            .WithMany()
+            .HasForeignKey(g => g.PlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<JokerGrant>()
+            .HasOne(g => g.Team)
+            .WithMany()
+            .HasForeignKey(g => g.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<JokerUsageEvent>()
+            .Property(e => e.Type)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<JokerUsageEvent>()
+            .HasOne(e => e.Session)
+            .WithMany()
+            .HasForeignKey(e => e.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<JokerUsageEvent>()
+            .HasOne(e => e.ActorPlayer)
+            .WithMany()
+            .HasForeignKey(e => e.ActorPlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<JokerUsageEvent>()
+            .HasOne(e => e.ActorTeam)
+            .WithMany()
+            .HasForeignKey(e => e.ActorTeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // SetNull (pas Cascade) : ActorPlayerId cascade déjà vers Players — un second chemin cascade
+        // depuis la même entité vers la même table forcerait EF à arbitrer un ordre de suppression
+        // ambigu (même principe que Answer.Team/ScoreAdjustment.Question, déjà en SetNull ailleurs).
+        modelBuilder.Entity<JokerUsageEvent>()
+            .HasOne(e => e.TargetPlayer)
+            .WithMany()
+            .HasForeignKey(e => e.TargetPlayerId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<CopyPasteAssignment>()
+            .HasOne(c => c.Session)
+            .WithMany()
+            .HasForeignKey(c => c.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CopyPasteAssignment>()
+            .HasOne(c => c.Question)
+            .WithMany()
+            .HasForeignKey(c => c.QuestionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CopyPasteAssignment>()
+            .HasOne(c => c.CopierPlayer)
+            .WithMany()
+            .HasForeignKey(c => c.CopierPlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // SetNull, même raisonnement que JokerUsageEvent.TargetPlayer ci-dessus : CopierPlayerId cascade
+        // déjà vers Players.
+        modelBuilder.Entity<CopyPasteAssignment>()
+            .HasOne(c => c.TargetPlayer)
+            .WithMany()
+            .HasForeignKey(c => c.TargetPlayerId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Un seul copier/coller actif par (copieur, question) — une nouvelle utilisation remplace la précédente.
+        modelBuilder.Entity<CopyPasteAssignment>()
+            .HasIndex(c => new { c.QuestionId, c.CopierPlayerId })
+            .IsUnique();
+
+        modelBuilder.Entity<QcmFiftyFiftyReveal>()
+            .HasOne(r => r.Session)
+            .WithMany()
+            .HasForeignKey(r => r.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<QcmFiftyFiftyReveal>()
+            .HasOne(r => r.Question)
+            .WithMany()
+            .HasForeignKey(r => r.QuestionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<QcmFiftyFiftyReveal>()
+            .HasOne(r => r.Player)
+            .WithMany()
+            .HasForeignKey(r => r.PlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Un seul tirage 50/50 par (joueur, question) — relancer le joker sur la même question réutilise
+        // le même masquage déjà calculé plutôt que d'en tirer un nouveau (voir JokerService.UseFiftyFifty).
+        modelBuilder.Entity<QcmFiftyFiftyReveal>()
+            .HasIndex(r => new { r.QuestionId, r.PlayerId })
             .IsUnique();
     }
 }

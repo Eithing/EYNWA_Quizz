@@ -1,5 +1,17 @@
 @if (state(); as s) {
   <div class="host-live">
+    @if (jokerToast(); as toast) {
+      <div class="host-live__joker-toast">
+        {{ jokerIcons[toast.type] }} <strong>{{ toast.actorLabel }}</strong> a utilisé {{ jokerLabels[toast.type] }}
+        @if (toast.targetLabel) {
+          sur <strong>{{ toast.targetLabel }}</strong>
+        }
+        @if (toast.detail) {
+          — {{ toast.detail }}
+        }
+      </div>
+    }
+
     <div class="host-live__header">
       <div>
         <h1>{{ s.quizTitle }}</h1>
@@ -240,6 +252,63 @@
       }
     </app-ui-card>
 
+    @if (s.status === 'Lobby') {
+      <app-ui-card>
+        <div class="host-live__teams-header">
+          <h3>Jokers</h3>
+          @if (!jokerEditorOpen()) {
+            <button type="button" class="btn btn-secondary" (click)="openJokerEditor()">Configurer les jokers</button>
+          }
+        </div>
+
+        @if (!jokerEditorOpen()) {
+          @if ((state()?.jokerGrants?.length ?? 0) === 0) {
+            <p class="host-live__hint">Aucun joker attribué — la partie se joue sans jokers.</p>
+          } @else {
+            <ul class="host-live__joker-summary">
+              @for (grant of state()?.jokerGrants ?? []; track grant.id) {
+                <li>
+                  <span>{{ jokerIcons[grant.type] }} {{ jokerLabels[grant.type] }}</span>
+                  <span>{{ grant.ownerTeamId !== null ? teamName(grant.ownerTeamId) : playerPseudo(grant.ownerPlayerId) }} — {{ grant.charges }}×</span>
+                </li>
+              }
+            </ul>
+          }
+        } @else {
+          <p class="host-live__hint">
+            {{ jokerOwners().length === 0 ? "Aucun joueur n'a encore rejoint." : 'Charges par ' + (state()?.teams?.length ? 'équipe' : 'joueur') + '.' }}
+          </p>
+          <div class="host-live__joker-editor">
+            @for (owner of jokerOwners(); track owner.kind + owner.id) {
+              <div class="host-live__joker-owner-row">
+                <strong>{{ owner.label }}</strong>
+                <div class="host-live__joker-owner-inputs">
+                  @for (type of jokerTypes; track type) {
+                    <label>
+                      <span>{{ jokerIcons[type] }} {{ jokerLabels[type] }}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        [value]="jokerDraftValue(owner, type)"
+                        (input)="setJokerDraftValue(owner, type, $any($event.target).valueAsNumber || 0)"
+                      />
+                    </label>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+          <div class="host-live__team-builder-actions">
+            <div></div>
+            <div>
+              <button type="button" class="btn btn-secondary" (click)="cancelJokerEditor()">Annuler</button>
+              <button type="button" class="btn btn-primary" (click)="saveJokerGrants()">Enregistrer les jokers</button>
+            </div>
+          </div>
+        }
+      </app-ui-card>
+    }
+
     <div class="host-live__body">
       <app-ui-card>
         <h3>Question en cours</h3>
@@ -313,7 +382,7 @@
                     <app-participant-selector
                       [players]="s.players"
                       [teams]="s.teams"
-                      confirmLabel="Lancer ce thème"
+                      confirmLabel="Désigner"
                       (confirm)="onChooseTheme(theme.subRoundId, $event)"
                     />
                   }
@@ -321,6 +390,19 @@
               </li>
             }
           </ul>
+        } @else if (s.status === 'ThemeReadyToLaunch') {
+          @if (readyToLaunchTheme(); as theme) {
+            <p class="host-live__hint">
+              <strong>{{ theme.title }}</strong> désigné —
+              @if (participantNames(); as names) {
+                {{ names }}
+              } @else {
+                personne
+              }
+              . Une fenêtre pour le joker Échange reste ouverte jusqu'au lancement.
+            </p>
+            <button type="button" class="btn btn-primary" (click)="launchTheme(theme.subRoundId)">Lancer le thème</button>
+          }
         } @else if (s.status === 'AwaitingAnswerer') {
           <p class="host-live__hint">Désigne le joueur qui répond en privé à cette question :</p>
           <ul class="host-live__target-picker">

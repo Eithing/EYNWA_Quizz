@@ -5,6 +5,66 @@
       <span class="play__score">{{ myScore() }} pts</span>
     </div>
 
+    @if (jokerToast(); as toast) {
+      <div class="play__joker-toast">
+        {{ jokerIcons[toast.type] }} <strong>{{ toast.actorLabel }}</strong> a utilisé {{ jokerLabels[toast.type] }}
+        @if (toast.targetLabel) {
+          sur <strong>{{ toast.targetLabel }}</strong>
+        }
+        @if (toast.detail) {
+          — {{ toast.detail }}
+        }
+      </div>
+    }
+
+    @if (usableJokers().length > 0) {
+      <div class="play__joker-tray">
+        @for (grant of usableJokers(); track grant.id) {
+          <button
+            type="button"
+            class="play__joker-btn"
+            [disabled]="jokerUsing()"
+            [title]="jokerLabels[grant.type]"
+            (click)="grant.type === 'CopyPaste' ? openCopyPastePicker() : useJoker(grant.type)"
+          >
+            <span class="play__joker-icon">{{ jokerIcons[grant.type] }}</span>
+            <span class="play__joker-label">{{ jokerLabels[grant.type] }}</span>
+            <span class="play__joker-charges">{{ grant.charges }}×</span>
+          </button>
+        }
+      </div>
+      @if (jokerError(); as message) {
+        <p class="play__error">{{ message }}</p>
+      }
+    }
+
+    @if (copyPastePickerOpen()) {
+      <div class="play__tool-overlay">
+        <app-ui-card>
+          <p class="play__question-text">📋 Copier/coller — choisis un joueur</p>
+          <p class="play__hint">Sa réponse deviendra la tienne une fois le temps écoulé (tu ne la vois pas avant).</p>
+
+          <ul class="play__copy-paste-targets">
+            @for (target of copyPasteTargets(); track target.id) {
+              <li>
+                <button type="button" class="btn btn-secondary" [disabled]="jokerUsing()" (click)="useJoker('CopyPaste', target.id)">
+                  {{ target.pseudo }}
+                </button>
+              </li>
+            } @empty {
+              <p class="play__hint">Aucun autre joueur disponible.</p>
+            }
+          </ul>
+
+          @if (jokerError(); as message) {
+            <p class="play__error">{{ message }}</p>
+          }
+
+          <button type="button" class="btn btn-secondary" (click)="cancelCopyPastePicker()">Annuler</button>
+        </app-ui-card>
+      </div>
+    }
+
     @if (s.activeRandomDraw; as draw) {
       @if (isConcernedByRandomDraw()) {
         <div class="play__tool-overlay">
@@ -151,6 +211,22 @@
               }
             </ul>
             <p class="play__hint">En attente que l'hôte lance le prochain thème…</p>
+          </app-ui-card>
+        }
+
+        @if (s.status === 'ThemeReadyToLaunch') {
+          <app-ui-card>
+            @if (readyToLaunchTheme(); as theme) {
+              <h3 class="play__scoreboard-title">{{ theme.title }}</h3>
+            }
+            <p class="play__hint">
+              @if (participantNames(); as names) {
+                Désigné : <strong>{{ names }}</strong>
+              } @else {
+                Personne n'est encore désigné.
+              }
+            </p>
+            <p class="play__hint">En attente que l'hôte lance ce thème…</p>
           </app-ui-card>
         }
 
@@ -422,7 +498,15 @@
                 } @else if (q.hasAnswered) {
                   <p class="play__hint">Vous avez déjà utilisé votre tentative sur cette question.</p>
                 } @else if (q.isAnswerWindowOpen) {
-                  <button type="button" class="play__buzzer-btn" [disabled]="buzzing()" (click)="buzz()">
+                  @if (buzzerLockedByMeFirst()) {
+                    <p class="play__hint">🏎️ Un joueur a la priorité sur cette question (joker Moi d'abord)…</p>
+                  }
+                  <button
+                    type="button"
+                    class="play__buzzer-btn"
+                    [disabled]="buzzing() || buzzerLockedByMeFirst()"
+                    (click)="buzz()"
+                  >
                     {{ buzzing() ? '…' : 'BUZZ !' }}
                   </button>
                 } @else {

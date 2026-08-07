@@ -100,6 +100,40 @@ public class QcmEngine : IFeatureEngine
 
     public double GetFastForwardTargetElapsedSeconds(string configJson) => ParseConfig(configJson).AnswerTimeSeconds;
 
+    /// <summary>Retire des options d'un payload public déjà construit — utilisé par le joker
+    /// Cinquante-cinquante (effet personnel à un joueur, jamais partagé, donc appliqué après coup plutôt
+    /// que dans BuildPublicPayloadJson qui ne connaît pas le joueur). maxSelectable/correctOptionPoints
+    /// restent inchangés : ce sont toujours les mêmes bonnes réponses à trouver, juste moins de bruit.</summary>
+    public static string RemoveOptions(string publicPayloadJson, List<string> hiddenOptionIds)
+    {
+        var parsed = JsonSerializer.Deserialize<PublicPayloadShape>(publicPayloadJson, JsonOptions) ?? new PublicPayloadShape();
+        var visibleOptions = parsed.Options.Where(o => !hiddenOptionIds.Contains(o.Id)).ToList();
+
+        return JsonSerializer.Serialize(
+            new
+            {
+                questionText = parsed.QuestionText,
+                options = visibleOptions.Select(o => new { id = o.Id, content = o.Content }),
+                maxSelectable = parsed.MaxSelectable,
+                correctOptionPoints = parsed.CorrectOptionPoints
+            },
+            PublicJsonOptions);
+    }
+
+    private class PublicPayloadShape
+    {
+        public string QuestionText { get; set; } = "";
+        public List<PublicOptionShape> Options { get; set; } = [];
+        public int MaxSelectable { get; set; }
+        public List<int> CorrectOptionPoints { get; set; } = [];
+    }
+
+    private class PublicOptionShape
+    {
+        public string Id { get; set; } = "";
+        public string Content { get; set; } = "";
+    }
+
     private static QcmRoundConfig ParseConfig(string configJson) =>
         JsonSerializer.Deserialize<QcmRoundConfig>(configJson, JsonOptions) ?? new QcmRoundConfig();
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
-import { GameSessionState, Player } from '../../models/session.model';
+import { GameSessionState, JokerUsedEvent, Player } from '../../models/session.model';
 
 @Injectable({ providedIn: 'root' })
 export class GameSignalrService {
@@ -37,6 +37,10 @@ export class GameSignalrService {
 
   onAnswerPendingValidation(callback: () => void): void {
     this.connection?.on('AnswerPendingValidation', callback);
+  }
+
+  onJokerUsed(callback: (event: JokerUsedEvent) => void): void {
+    this.connection?.on('JokerUsed', callback);
   }
 
   async disconnect(): Promise<void> {

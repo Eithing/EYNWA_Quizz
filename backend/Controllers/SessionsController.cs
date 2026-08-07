@@ -8,6 +8,7 @@ using QuizParty.Api.Data;
 using QuizParty.Api.Dtos;
 using QuizParty.Api.Extensions;
 using QuizParty.Api.Features.OrderList;
+using QuizParty.Api.Features.Qcm;
 using QuizParty.Api.Features.Shared;
 using QuizParty.Api.Hubs;
 using QuizParty.Api.Models;
@@ -174,6 +175,73 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         return Ok(await BuildStateDto(session, quiz));
     }
 
+    /// <summary>Remplace l'inventaire complet des jokers de la session — appelé depuis le lobby, peut être
+    /// rappelé pour ajuster tant que la partie n'a pas démarré (aucune contrainte de statut : rien
+    /// n'empêche de le faire aussi en cours de partie si besoin).</summary>
+    [Authorize]
+    [HttpPost("{id:int}/jokers/grants")]
+    public async Task<ActionResult<GameSessionStateDto>> SetJokerGrants(int id, SetJokerGrantsRequest request)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+
+        var validPlayerIds = session.Players.Select(p => p.Id).ToHashSet();
+        var validTeamIds = session.Teams.Select(t => t.Id).ToHashSet();
+
+        foreach (var grant in request.Grants)
+        {
+            if (!Enum.TryParse<JokerType>(grant.Type, out _))
+            {
+                return BadRequest($"Type de joker invalide : {grant.Type}.");
+            }
+
+            if (grant.PlayerId is null == grant.TeamId is null)
+            {
+                return BadRequest("Chaque attribution doit cibler soit un joueur, soit une équipe (pas les deux, pas aucun).");
+            }
+
+            if (grant.PlayerId is not null && !validPlayerIds.Contains(grant.PlayerId.Value))
+            {
+                return BadRequest("Joueur introuvable dans cette session.");
+            }
+
+            if (grant.TeamId is not null && !validTeamIds.Contains(grant.TeamId.Value))
+            {
+                return BadRequest("Équipe introuvable dans cette session.");
+            }
+
+            if (grant.Charges < 0)
+            {
+                return BadRequest("Le nombre de charges ne peut pas être négatif.");
+            }
+        }
+
+        var existing = await db.JokerGrants.Where(g => g.SessionId == id).ToListAsync();
+        db.JokerGrants.RemoveRange(existing);
+
+        foreach (var grant in request.Grants.Where(g => g.Charges > 0))
+        {
+            db.JokerGrants.Add(new JokerGrant
+            {
+                SessionId = id,
+                Type = Enum.Parse<JokerType>(grant.Type),
+                PlayerId = grant.PlayerId,
+                TeamId = grant.TeamId,
+                Charges = grant.Charges
+            });
+        }
+
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
     /// <summary>Bascule le mode équipe pour la manche en cours (sans passer par une sélection de
     /// participants restreinte) : les points gagnés à partir de maintenant vont dans le pot d'équipe du
     /// joueur qui répond plutôt que dans son score perso.</summary>
@@ -265,6 +333,36 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         themeState.IsRevealed = true;
         session.CurrentThemeSubRoundId = subRoundId;
         session.CurrentQuestionIndex = 0;
+        // Ne démarre pas encore le minuteur : le thème est désigné mais reste en attente de lancement
+        // explicite (voir /themes/{subRoundId}/launch) — fenêtre pendant laquelle le joker Échange peut
+        // voler la désignation avant que la manche ne commence pour de bon.
+        session.Status = GameSessionStatus.ThemeReadyToLaunch;
+
+        await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
+    /// <summary>Démarre pour de bon un thème désigné via ChooseTheme (statut ThemeReadyToLaunch) — le
+    /// minuteur ne se lance qu'ici, jamais dans ChooseTheme, pour laisser la fenêtre de vol du joker
+    /// Échange se refermer explicitement à l'initiative du GM.</summary>
+    [Authorize]
+    [HttpPost("{id:int}/themes/{subRoundId:int}/launch")]
+    public async Task<ActionResult<GameSessionStateDto>> LaunchTheme(int id, int subRoundId)
+    {
+        var loaded = await LoadOwnedSession(id, User.GetGameMasterId());
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+        if (session.Status != GameSessionStatus.ThemeReadyToLaunch || session.CurrentThemeSubRoundId != subRoundId)
+        {
+            return BadRequest("Ce thème n'est pas en attente de lancement.");
+        }
+
         session.Status = GameSessionStatus.Running;
         session.CurrentQuestionStartedAt = DateTime.UtcNow;
 
@@ -454,7 +552,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         session.CurrentQuestionStartedAt = DateTime.UtcNow;
         session.PausedAt = null;
-        session.CurrentBuzzHolderPlayerId = null;
+        session.CurrentBuzzHolderPlayerId = null; ResetPerQuestionJokerEffects(session);
 
         await db.SaveChangesAsync();
         await BroadcastState(session, quiz);
@@ -779,6 +877,10 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             await AwardPartnerGuessAnswererBonusAsync(session, round, question, buzzPointsAwarded, buzzSubmittedAt);
         }
 
+        // Ne PAS appeler ResetPerQuestionJokerEffects ici : la question n'est pas terminée (juste le
+        // verdict du buzz en cours), un retry classique peut suivre si la réponse est fausse — décrémenter
+        // Moi d'abord ou effacer Seul au monde à ce stade serait prématuré (voir les autres call-sites de
+        // CurrentBuzzHolderPlayerId = null, qui correspondent eux à de vraies transitions de question).
         session.CurrentBuzzHolderPlayerId = null;
         await ResumeAfterReviewIfClearAsync(session, question.Id);
         await db.SaveChangesAsync();
@@ -1182,6 +1284,19 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         var publicPayloadJson = engine.BuildPublicPayloadJson(effectivePayloadForPlayer, round.ConfigJson);
 
         var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == connectionToken);
+
+        // Joker Cinquante-cinquante : effet personnel, jamais partagé — retire les options masquées POUR
+        // CE joueur du payload public juste avant de le renvoyer, sans toucher à QcmEngine.
+        if (round.FeatureTypeKey == "multiple-choice" && player is not null)
+        {
+            var reveal = await db.QcmFiftyFiftyReveals.SingleOrDefaultAsync(r => r.QuestionId == question.Id && r.PlayerId == player.Id);
+            if (reveal is not null)
+            {
+                var hiddenIds = JsonSerializer.Deserialize<List<string>>(reveal.HiddenOptionIdsJson, JsonOptions) ?? [];
+                publicPayloadJson = QcmEngine.RemoveOptions(publicPayloadJson, hiddenIds);
+            }
+        }
+
         var lastAnswer = player is null ? null : await GetLastAnswer(player.Id, question.Id);
         // Bloqué si aucune tentative n'est en cours (correcte ou en attente de validation manuelle),
         // ou si la dernière tentative était fausse mais qu'aucun nouvel essai n'est encore permis.
@@ -1320,6 +1435,19 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return Conflict("Un autre joueur a déjà la main.");
         }
 
+        // Joker Moi d'abord : verrouille le buzzer pour tout le monde sauf le détenteur tant qu'il n'a pas
+        // buzzé sur cette question — une fois qu'il l'a fait (MeFirstConsumedThisQuestion), le retry
+        // classique reprend normalement pour tous en cas de mauvaise réponse (voir ResolveBuzz).
+        if (session.MeFirstQuestionsRemaining > 0 && !session.MeFirstConsumedThisQuestion)
+        {
+            var isMeFirstHolder = session.MeFirstHolderPlayerId == player.Id
+                || (player.TeamId is not null && session.MeFirstHolderTeamId == player.TeamId);
+            if (!isMeFirstHolder)
+            {
+                return Conflict("Un autre joueur a la priorité pour buzzer sur cette question (joker Moi d'abord).");
+            }
+        }
+
         var lastAnswer = await GetLastAnswer(player.Id, question.Id);
         if (lastAnswer is not null && !await CanPlayerRetryAsync(session, question, engine, round.ConfigJson, lastAnswer))
         {
@@ -1327,9 +1455,86 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         }
 
         session.CurrentBuzzHolderPlayerId = player.Id;
+        if (session.MeFirstQuestionsRemaining > 0)
+        {
+            session.MeFirstConsumedThisQuestion = true;
+        }
         // Le temps s'arrête tant que le GM n'a pas jugé la réponse orale du joueur qui a la main.
         PauseForPendingReview(session);
         await db.SaveChangesAsync();
+        await BroadcastState(session, quiz);
+
+        return Ok(await BuildStateDto(session, quiz));
+    }
+
+    /// <summary>Point d'entrée unique pour l'utilisation d'un joker — dispatche vers la logique propre à
+    /// chaque type (voir Use*Async ci-dessous), décrémente la charge et diffuse un toast "JokerUsed" en
+    /// cas de succès. Pas d'interface pluggable façon IFeatureEngine : 5 jokers fixes, un switch suffit.</summary>
+    [AllowAnonymous]
+    [HttpPost("by-token/{token}/jokers/use")]
+    public async Task<ActionResult<GameSessionStateDto>> UseJoker(string token, UseJokerRequest request)
+    {
+        var loaded = await LoadSessionByToken(token);
+        if (loaded is null)
+        {
+            return NotFound();
+        }
+
+        var (session, quiz) = loaded.Value;
+
+        var player = await db.Players.SingleOrDefaultAsync(p => p.SessionId == session.Id && p.ConnectionToken == request.ConnectionToken);
+        if (player is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!Enum.TryParse<JokerType>(request.Type, out var type))
+        {
+            return BadRequest("Type de joker invalide.");
+        }
+
+        var grant = await FindUsableJokerGrantAsync(session, player, type);
+        if (grant is null)
+        {
+            return BadRequest("Aucune charge disponible pour ce joker.");
+        }
+
+        var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
+
+        var result = type switch
+        {
+            JokerType.FiftyFifty => await UseFiftyFiftyAsync(session, round, question, player),
+            JokerType.MeFirst => await UseMeFirstAsync(session, round, grant, player),
+            JokerType.AloneInTheWorld => await UseAloneInTheWorldAsync(session, round, question, grant, player),
+            JokerType.CopyPaste => await UseCopyPasteAsync(session, round, question, player, request.TargetPlayerId),
+            JokerType.Exchange => await UseExchangeAsync(session, quiz, grant, player),
+            _ => (Success: false, Error: "Ce joker n'est pas encore disponible.", Detail: (string?)null, TargetPlayer: (Player?)null)
+        };
+
+        if (!result.Success)
+        {
+            return BadRequest(result.Error);
+        }
+
+        grant.Charges--;
+        db.JokerUsageEvents.Add(new JokerUsageEvent
+        {
+            SessionId = session.Id,
+            Type = type,
+            ActorPlayerId = grant.PlayerId,
+            ActorTeamId = grant.TeamId,
+            TargetPlayerId = result.TargetPlayer?.Id,
+            Detail = result.Detail,
+            UsedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+
+        var actorLabel = grant.TeamId is not null
+            ? session.Teams.SingleOrDefault(t => t.Id == grant.TeamId)?.Name ?? "Équipe"
+            : player.Pseudo;
+        var jokerUsedEvent = new JokerUsedEventDto(type.ToString(), actorLabel, result.TargetPlayer?.Pseudo, result.Detail);
+        await hub.Clients.Group(session.InviteToken).SendAsync("JokerUsed", jokerUsedEvent);
         await BroadcastState(session, quiz);
 
         return Ok(await BuildStateDto(session, quiz));
@@ -1416,6 +1621,19 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         var pointsAwarded = engine.UsesRankBasedScoring(round.ConfigJson)
             ? (evaluation.IsCorrect == true ? pendingPoints : 0)
             : evaluation.PointsAwarded;
+
+        // Joker Seul au monde : si actif sur cette question, seule la réponse du détenteur compte pour
+        // les points — les autres restent jugées normalement (juste/faux visible pour le joueur) mais ne
+        // rapportent rien.
+        if (session.AloneInTheWorldPlayerId is not null || session.AloneInTheWorldTeamId is not null)
+        {
+            var isAloneInTheWorldHolder = session.AloneInTheWorldPlayerId == player.Id
+                || (player.TeamId is not null && session.AloneInTheWorldTeamId == player.TeamId);
+            if (!isAloneInTheWorldHolder)
+            {
+                pointsAwarded = 0;
+            }
+        }
 
         var answer = new Answer
         {
@@ -1813,6 +2031,10 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         // permet au joueur de voir son résultat même s'il n'a jamais cliqué "Valider".
         dirty |= await FinalizeIndependentPendingAnswersIfDueAsync(session, round, question, engine);
 
+        // Joker Copier/coller : une fois la fenêtre fermée, les assignations en attente sur cette
+        // question copient la réponse (déjà finalisée ci-dessus si besoin) du joueur ciblé.
+        dirty |= await ResolveCopyPasteAssignmentsIfDueAsync(session, round, question, engine);
+
         var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
         var allAnswered = await AllPlayersAnsweredCorrectly(session, round, question);
 
@@ -2012,6 +2234,272 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         }
 
         return null;
+    }
+
+    /// <summary>Referme la fenêtre d'effet des jokers "actifs sur la question courante" à chaque vraie
+    /// transition de question (mêmes call-sites que la remise à null de CurrentBuzzHolderPlayerId, SAUF
+    /// ResolveBuzz qui ne termine pas forcément la question — voir son commentaire dédié) : Seul au monde
+    /// est toujours effacé (effet strictement limité à une question) ; Moi d'abord décrémente son compteur
+    /// tant qu'actif et efface son détenteur une fois à 0.</summary>
+    private static void ResetPerQuestionJokerEffects(GameSession session)
+    {
+        session.AloneInTheWorldPlayerId = null;
+        session.AloneInTheWorldTeamId = null;
+
+        if (session.MeFirstQuestionsRemaining > 0)
+        {
+            session.MeFirstQuestionsRemaining--;
+            session.MeFirstConsumedThisQuestion = false;
+            if (session.MeFirstQuestionsRemaining == 0)
+            {
+                session.MeFirstHolderPlayerId = null;
+                session.MeFirstHolderTeamId = null;
+            }
+        }
+    }
+
+    /// <summary>Trouve une charge de joker utilisable par ce joueur : soit attribuée directement à lui,
+    /// soit à son équipe (stock partagé, n'importe quel membre peut piocher dedans).</summary>
+    private async Task<JokerGrant?> FindUsableJokerGrantAsync(GameSession session, Player player, JokerType type)
+    {
+        return await db.JokerGrants.SingleOrDefaultAsync(g =>
+            g.SessionId == session.Id && g.Type == type && g.Charges > 0 &&
+            (g.PlayerId == player.Id || (player.TeamId != null && g.TeamId == player.TeamId)));
+    }
+
+    /// <summary>Joker Cinquante-cinquante : masque, pour CE joueur uniquement, la moitié des mauvaises
+    /// options d'une question QCM en cours — le nombre de bonnes réponses attendues ne change pas.</summary>
+    private async Task<(bool Success, string? Error, string? Detail, Player? TargetPlayer)> UseFiftyFiftyAsync(GameSession session, Round? round, Question? question, Player player)
+    {
+        if (round is null || question is null || round.FeatureTypeKey != "multiple-choice" || session.CurrentQuestionStartedAt is null)
+        {
+            return (false, "Aucune question à choix multiple en cours.", null, null);
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        if (!state.IsAnswerWindowOpen)
+        {
+            return (false, "Le temps de réponse est écoulé.", null, null);
+        }
+
+        var eligibleIds = await GetEligiblePlayerIdsAsync(session, round);
+        if (!eligibleIds.Contains(player.Id))
+        {
+            return (false, "Vous êtes spectateur pour cette manche.", null, null);
+        }
+
+        var alreadyUsed = await db.QcmFiftyFiftyReveals.AnyAsync(r => r.QuestionId == question.Id && r.PlayerId == player.Id);
+        if (alreadyUsed)
+        {
+            return (false, "Déjà utilisé sur cette question.", null, null);
+        }
+
+        var payload = JsonSerializer.Deserialize<QcmQuestionPayload>(question.PayloadJson, JsonOptions) ?? new QcmQuestionPayload();
+        var wrongOptionIds = payload.Options.Where(o => !o.IsCorrect).Select(o => o.Id).ToList();
+        if (wrongOptionIds.Count < 2)
+        {
+            return (false, "Pas assez de mauvaises réponses pour utiliser ce joker.", null, null);
+        }
+
+        var toHide = wrongOptionIds.OrderBy(_ => Random.Shared.Next()).Take(wrongOptionIds.Count / 2).ToList();
+
+        db.QcmFiftyFiftyReveals.Add(new QcmFiftyFiftyReveal
+        {
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            PlayerId = player.Id,
+            HiddenOptionIdsJson = JsonSerializer.Serialize(toHide)
+        });
+
+        return (true, null, null, null);
+    }
+
+    /// <summary>Manches où une "bonne réponse immédiate" a un sens (réponse simultanée jugée dans la
+    /// foulée) — exclut closest-guess/partner-guess (résolution différée ou réponse privée), voir le plan
+    /// approuvé pour Seul au monde/Copier-coller.</summary>
+    private static readonly HashSet<string> SimultaneousAnswerFeatures =
+        ["qa-text", "zoom-image", "blind-test", "image-guess", "multiple-choice", "order-list"];
+
+    /// <summary>Joker Seul au monde : force que seule la réponse du détenteur compte pour les points sur
+    /// la question courante — les réponses déjà soumises par les autres sont immédiatement remises à 0,
+    /// et toute soumission future passe par le même garde-fou (voir SubmitAnswer).</summary>
+    private async Task<(bool Success, string? Error, string? Detail, Player? TargetPlayer)> UseAloneInTheWorldAsync(GameSession session, Round? round, Question? question, JokerGrant grant, Player player)
+    {
+        if (round is null || question is null || session.CurrentQuestionStartedAt is null || !SimultaneousAnswerFeatures.Contains(round.FeatureTypeKey))
+        {
+            return (false, "Ce joker n'est pas utilisable sur cette manche.", null, null);
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        if (!state.IsAnswerWindowOpen)
+        {
+            return (false, "Le temps de réponse est écoulé.", null, null);
+        }
+
+        var eligibleIds = await GetEligiblePlayerIdsAsync(session, round);
+        if (!eligibleIds.Contains(player.Id))
+        {
+            return (false, "Vous êtes spectateur pour cette manche.", null, null);
+        }
+
+        if (session.AloneInTheWorldPlayerId is not null || session.AloneInTheWorldTeamId is not null)
+        {
+            return (false, "Déjà utilisé sur cette question.", null, null);
+        }
+
+        session.AloneInTheWorldPlayerId = grant.PlayerId;
+        session.AloneInTheWorldTeamId = grant.TeamId;
+
+        var existingAnswers = await db.Answers.Where(a => a.SessionId == session.Id && a.QuestionId == question.Id).ToListAsync();
+        foreach (var existing in existingAnswers)
+        {
+            var isHolder = existing.PlayerId == grant.PlayerId || (grant.TeamId is not null && existing.TeamId == grant.TeamId);
+            if (!isHolder)
+            {
+                existing.PointsAwarded = 0;
+            }
+        }
+
+        return (true, null, null, null);
+    }
+
+    /// <summary>Joker Échange : pendant la fenêtre "thème désigné mais pas encore lancé"
+    /// (ThemeReadyToLaunch), permet à un joueur non-participant de remplacer la désignation actuelle par
+    /// lui-même (ou son équipe, selon le propriétaire de la charge de joker).</summary>
+    private async Task<(bool Success, string? Error, string? Detail, Player? TargetPlayer)> UseExchangeAsync(GameSession session, Quiz quiz, JokerGrant grant, Player player)
+    {
+        if (session.Status != GameSessionStatus.ThemeReadyToLaunch || session.CurrentThemeSubRoundId is null)
+        {
+            return (false, "Aucun thème en attente de lancement.", null, null);
+        }
+
+        var participants = await db.RoundParticipants.Where(rp => rp.SessionId == session.Id).ToListAsync();
+        var isAlreadyParticipant = participants.Any(rp =>
+            rp.PlayerId == player.Id || (player.TeamId is not null && rp.TeamId == player.TeamId));
+        if (isAlreadyParticipant)
+        {
+            return (false, "Tu fais déjà partie des participants de ce thème.", null, null);
+        }
+
+        var topRound = TopLevelRounds(quiz).ElementAtOrDefault(session.CurrentRoundIndex);
+        var subRound = topRound?.SubRounds.SingleOrDefault(sr => sr.Id == session.CurrentThemeSubRoundId);
+
+        db.RoundParticipants.RemoveRange(participants);
+        db.RoundParticipants.Add(grant.TeamId is not null
+            ? new RoundParticipant { SessionId = session.Id, TeamId = grant.TeamId }
+            : new RoundParticipant { SessionId = session.Id, PlayerId = grant.PlayerId });
+
+        if (grant.TeamId is not null)
+        {
+            session.TeamScoringEnabled = true;
+        }
+
+        return (true, null, subRound?.Title, null);
+    }
+
+    /// <summary>Joker Copier/coller : crée une assignation résolue à la fermeture de la fenêtre de réponse
+    /// (voir ResolveCopyPasteAssignmentsAsync) — le copieur ne voit jamais la réponse de la cible avant
+    /// que celle-ci ne devienne la sienne.</summary>
+    private async Task<(bool Success, string? Error, string? Detail, Player? TargetPlayer)> UseCopyPasteAsync(GameSession session, Round? round, Question? question, Player player, int? targetPlayerId)
+    {
+        if (round is null || question is null || session.CurrentQuestionStartedAt is null || !SimultaneousAnswerFeatures.Contains(round.FeatureTypeKey))
+        {
+            return (false, "Ce joker n'est pas utilisable sur cette manche.", null, null);
+        }
+
+        if (targetPlayerId is null)
+        {
+            return (false, "Choisis un joueur à copier.", null, null);
+        }
+
+        if (targetPlayerId == player.Id)
+        {
+            return (false, "Tu ne peux pas te copier toi-même.", null, null);
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        if (!state.IsAnswerWindowOpen)
+        {
+            return (false, "Le temps de réponse est écoulé.", null, null);
+        }
+
+        var eligibleIds = await GetEligiblePlayerIdsAsync(session, round);
+        if (!eligibleIds.Contains(player.Id))
+        {
+            return (false, "Vous êtes spectateur pour cette manche.", null, null);
+        }
+
+        if (!eligibleIds.Contains(targetPlayerId.Value))
+        {
+            return (false, "Ce joueur n'est pas éligible pour cette manche.", null, null);
+        }
+
+        var alreadyUsed = await db.CopyPasteAssignments.AnyAsync(c => c.QuestionId == question.Id && c.CopierPlayerId == player.Id);
+        if (alreadyUsed)
+        {
+            return (false, "Déjà utilisé sur cette question.", null, null);
+        }
+
+        var target = session.Players.SingleOrDefault(p => p.Id == targetPlayerId.Value);
+        if (target is null)
+        {
+            return (false, "Joueur introuvable.", null, null);
+        }
+
+        db.CopyPasteAssignments.Add(new CopyPasteAssignment
+        {
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            CopierPlayerId = player.Id,
+            TargetPlayerId = target.Id,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        return (true, null, null, target);
+    }
+
+    /// <summary>Joker Moi d'abord : garantit d'avoir la main en premier sur les 2 prochaines questions
+    /// d'un thème en mode buzzer — voir ResetPerQuestionJokerEffects pour la décrémentation et le verrou
+    /// posé dans Buzz ci-dessus.</summary>
+    private async Task<(bool Success, string? Error, string? Detail, Player? TargetPlayer)> UseMeFirstAsync(GameSession session, Round? round, JokerGrant grant, Player player)
+    {
+        if (round is null || session.CurrentQuestionStartedAt is null)
+        {
+            return (false, "Aucune question en cours.", null, null);
+        }
+
+        var engine = engineRegistry.Get(round.FeatureTypeKey);
+        if (!engine.IsBuzzerMode(round.ConfigJson))
+        {
+            return (false, "Cette manche n'est pas en mode buzzer.", null, null);
+        }
+
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt.Value, session.PausedAt, DateTime.UtcNow);
+        if (!state.IsAnswerWindowOpen)
+        {
+            return (false, "Le temps de réponse est écoulé.", null, null);
+        }
+
+        var eligibleIds = await GetEligiblePlayerIdsAsync(session, round);
+        if (!eligibleIds.Contains(player.Id))
+        {
+            return (false, "Vous êtes spectateur pour cette manche.", null, null);
+        }
+
+        if (session.MeFirstQuestionsRemaining > 0)
+        {
+            return (false, "Un joker Moi d'abord est déjà actif.", null, null);
+        }
+
+        session.MeFirstHolderPlayerId = grant.PlayerId;
+        session.MeFirstHolderTeamId = grant.TeamId;
+        session.MeFirstQuestionsRemaining = 2;
+        session.MeFirstConsumedThisQuestion = false;
+
+        return (true, null, null, null);
     }
 
     private async Task<bool> HasActiveHostToolAsync(int sessionId)
@@ -2276,6 +2764,84 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         }
     }
 
+    /// <summary>Déclenche la résolution du joker Copier/coller dès que la fenêtre de réponse est fermée
+    /// (même timing que FinalizeIndependentPendingAnswersIfDueAsync, dont dépend le résultat pour
+    /// order-list : la réponse de la cible doit déjà être finalisée avant d'être copiée).</summary>
+    private async Task<bool> ResolveCopyPasteAssignmentsIfDueAsync(GameSession session, Round round, Question question, IFeatureEngine engine)
+    {
+        var state = engine.ComputeState(round.ConfigJson, session.CurrentQuestionStartedAt!.Value, session.PausedAt, DateTime.UtcNow);
+        if (state.IsAnswerWindowOpen)
+        {
+            return false;
+        }
+
+        return await ResolveCopyPasteAssignmentsAsync(session, round, question);
+    }
+
+    /// <summary>Applique chaque assignation Copier/coller en attente sur cette question : la réponse du
+    /// copieur (créée si besoin) devient une copie exacte de celle du joueur ciblé — verdict et points
+    /// compris. Si la cible n'a pas répondu, le copieur reste sans réponse (rien à copier). Utilisé à la
+    /// fermeture de fenêtre (poll) et systématiquement avant de quitter une question, en filet de sécurité
+    /// pour le cas où le GM cliquerait "Suivant" avant qu'aucun poll n'ait eu l'occasion de résoudre.</summary>
+    private async Task<bool> ResolveCopyPasteAssignmentsAsync(GameSession session, Round round, Question question)
+    {
+        if (!SimultaneousAnswerFeatures.Contains(round.FeatureTypeKey))
+        {
+            return false;
+        }
+
+        var assignments = await db.CopyPasteAssignments.Where(c => c.SessionId == session.Id && c.QuestionId == question.Id).ToListAsync();
+        if (assignments.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var assignment in assignments)
+        {
+            var targetAnswer = await db.Answers
+                .Where(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.PlayerId == assignment.TargetPlayerId)
+                .OrderByDescending(a => a.SubmittedAt)
+                .FirstOrDefaultAsync();
+
+            if (targetAnswer is not null)
+            {
+                var copier = session.Players.SingleOrDefault(p => p.Id == assignment.CopierPlayerId);
+                var copierAnswer = await db.Answers
+                    .Where(a => a.SessionId == session.Id && a.QuestionId == question.Id && a.PlayerId == assignment.CopierPlayerId)
+                    .OrderByDescending(a => a.SubmittedAt)
+                    .FirstOrDefaultAsync();
+
+                if (copierAnswer is null)
+                {
+                    copierAnswer = new Answer
+                    {
+                        SessionId = session.Id,
+                        PlayerId = assignment.CopierPlayerId,
+                        QuestionId = question.Id,
+                        RawAnswer = targetAnswer.RawAnswer,
+                        ValidationMode = targetAnswer.ValidationMode,
+                        SubmittedAt = DateTime.UtcNow
+                    };
+                    db.Answers.Add(copierAnswer);
+                }
+                else
+                {
+                    copierAnswer.RawAnswer = targetAnswer.RawAnswer;
+                }
+
+                copierAnswer.IsCorrect = targetAnswer.IsCorrect;
+                copierAnswer.PendingPoints = targetAnswer.PendingPoints;
+                copierAnswer.PointsAwarded = targetAnswer.PointsAwarded;
+                copierAnswer.TeamId = session.TeamScoringEnabled ? copier?.TeamId : null;
+                copierAnswer.ValidatedByGmAt = DateTime.UtcNow;
+            }
+
+            db.CopyPasteAssignments.Remove(assignment);
+        }
+
+        return true;
+    }
+
     private async Task<bool> FastForwardIfAllPlayersAnswered(GameSession session, Round round, Question question, IFeatureEngine engine)
     {
         // Le temps est gelé pour une revue GM en cours (validation manuelle ou buzzer) : ne pas
@@ -2486,6 +3052,11 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             {
                 await FinalizeIndependentPendingAnswersAsync(session, leavingRound, leavingQuestion, leavingEngine);
             }
+
+            // Même filet de sécurité pour le joker Copier/coller : si le GM clique "Suivant" avant qu'un
+            // poll n'ait eu l'occasion de résoudre une assignation en attente, elle est appliquée ici avec
+            // les réponses telles qu'elles sont au moment de quitter la question (voir ResolveCopyPasteAssignmentsIfDueAsync).
+            await ResolveCopyPasteAssignmentsAsync(session, leavingRound, leavingQuestion);
         }
 
         var rounds = TopLevelRounds(quiz);
@@ -2505,7 +3076,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
                 session.Status = GameSessionStatus.Running;
                 session.CurrentQuestionStartedAt = DateTime.UtcNow;
                 session.PausedAt = null;
-                session.CurrentBuzzHolderPlayerId = null;
+                session.CurrentBuzzHolderPlayerId = null; ResetPerQuestionJokerEffects(session);
                 return;
             }
 
@@ -2521,7 +3092,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             session.Status = GameSessionStatus.ChoosingTheme;
             session.CurrentQuestionStartedAt = null;
             session.PausedAt = null;
-            session.CurrentBuzzHolderPlayerId = null;
+            session.CurrentBuzzHolderPlayerId = null; ResetPerQuestionJokerEffects(session);
             return;
         }
 
@@ -2546,7 +3117,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             session.Status = GameSessionStatus.RoundIntermission;
             session.CurrentQuestionStartedAt = null;
             session.PausedAt = null;
-            session.CurrentBuzzHolderPlayerId = null;
+            session.CurrentBuzzHolderPlayerId = null; ResetPerQuestionJokerEffects(session);
             return;
         }
         else if (hasNextRound)
@@ -2568,7 +3139,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             session.Status = GameSessionStatus.AwaitingAnswerer;
             session.CurrentQuestionStartedAt = null;
             session.PausedAt = null;
-            session.CurrentBuzzHolderPlayerId = null;
+            session.CurrentBuzzHolderPlayerId = null; ResetPerQuestionJokerEffects(session);
             session.CurrentAnswererPlayerId = null;
 
             var staleParticipants = await db.RoundParticipants.Where(rp => rp.SessionId == session.Id).ToListAsync();
@@ -2579,7 +3150,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         session.Status = GameSessionStatus.Running;
         session.CurrentQuestionStartedAt = DateTime.UtcNow;
         session.PausedAt = null;
-        session.CurrentBuzzHolderPlayerId = null;
+        session.CurrentBuzzHolderPlayerId = null; ResetPerQuestionJokerEffects(session);
     }
 
     /// <summary>Positionne la session au début d'une manche : démarre directement si elle est libre, s'arrête
@@ -2589,7 +3160,7 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
     private async Task EnterRoundAsync(List<Round> rounds, GameSession session, int roundIndex)
     {
         session.CurrentRoundIndex = roundIndex;
-        session.CurrentBuzzHolderPlayerId = null;
+        session.CurrentBuzzHolderPlayerId = null; ResetPerQuestionJokerEffects(session);
         session.PausedAt = null;
         session.TeamScoringEnabled = false;
         session.CurrentThemeSubRoundId = null;
@@ -2761,12 +3332,19 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
         var activeRandomDraw = await BuildActiveRandomDrawDtoAsync(session.Id);
         var activeStrawPoll = await BuildActiveStrawPollDtoAsync(session.Id);
 
+        var jokerGrants = await db.JokerGrants.Where(g => g.SessionId == session.Id)
+            .Select(g => new JokerGrantDto(g.Id, g.Type.ToString(), g.PlayerId, g.TeamId, g.Charges))
+            .ToListAsync();
+
         return new GameSessionStateDto(
             session.Id, session.InviteToken, quiz.Title, session.Status,
             session.CurrentRoundIndex, session.CurrentQuestionIndex, topLevelRounds.Count, session.ScoreboardVisible,
             participantPlayerIds, participantTeamIds, session.TeamScoringEnabled,
             session.CurrentBuzzHolderPlayerId, buzzHolderPseudo, players, teams, themeBoard,
-            session.CurrentAnswererPlayerId, answererPseudo, activeRandomDraw, activeStrawPoll);
+            session.CurrentAnswererPlayerId, answererPseudo, activeRandomDraw, activeStrawPoll,
+            jokerGrants, session.AloneInTheWorldPlayerId, session.AloneInTheWorldTeamId,
+            session.MeFirstHolderPlayerId, session.MeFirstHolderTeamId, session.MeFirstQuestionsRemaining,
+            session.MeFirstConsumedThisQuestion);
     }
 
     private async Task<Dictionary<int, int>> ComputeAllScores(int sessionId)

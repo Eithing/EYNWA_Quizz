@@ -17,6 +17,10 @@ public enum GameSessionStatus
     /// <summary>Des équipes existent pour cette session : en attente que le GM décide si la manche à venir
     /// se joue en mode équipe avant que le minuteur ne démarre.</summary>
     AwaitingTeamMode,
+    /// <summary>Manche à thèmes : un thème vient d'être désigné et ses participants assignés, mais la
+    /// manche n'a pas encore démarré (le minuteur n'est pas lancé) — fenêtre pendant laquelle le joker
+    /// Échange peut voler la désignation. Le GM démarre explicitement via /themes/{subRoundId}/launch.</summary>
+    ThemeReadyToLaunch,
     Finished
 }
 
@@ -63,6 +67,24 @@ public class GameSession
     /// <summary>Manche "à quoi pense l'autre" : joueur désigné par le GM pour répondre en privé à la
     /// question courante (peut changer à chaque question). Null tant qu'aucun n'est désigné.</summary>
     public int? CurrentAnswererPlayerId { get; set; }
+
+    /// <summary>Joker Seul au monde : détenteur (joueur solo ou équipe) sur la question courante — remis à
+    /// null à chaque nouvelle question, même cycle de vie que CurrentBuzzHolderPlayerId.</summary>
+    public int? AloneInTheWorldPlayerId { get; set; }
+    public int? AloneInTheWorldTeamId { get; set; }
+
+    /// <summary>Joker Moi d'abord : détenteur du verrou buzzer (joueur solo ou équipe).</summary>
+    public int? MeFirstHolderPlayerId { get; set; }
+    public int? MeFirstHolderTeamId { get; set; }
+
+    /// <summary>Nombre de questions encore couvertes par le verrou Moi d'abord (démarre à 2, décrémenté à
+    /// chaque nouvelle question tant que non nul ; le détenteur est effacé quand ça atteint 0).</summary>
+    public int MeFirstQuestionsRemaining { get; set; }
+
+    /// <summary>Vrai dès que le détenteur du verrou Moi d'abord a buzzé sur la question courante — le
+    /// verrou ne bloque alors plus les autres joueurs pour LE RESTE de cette question (retry classique si
+    /// sa réponse est jugée fausse), remis à faux à chaque nouvelle question.</summary>
+    public bool MeFirstConsumedThisQuestion { get; set; }
 
     public List<Player> Players { get; set; } = [];
     public List<Team> Teams { get; set; } = [];

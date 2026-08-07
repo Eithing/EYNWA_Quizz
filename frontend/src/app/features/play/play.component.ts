@@ -10,6 +10,10 @@ import {
   ClosestGuessPublicPayload,
   GameSessionState,
   ImageGuessPublicPayload,
+  JOKER_ICONS,
+  JOKER_LABELS,
+  JokerType,
+  JokerUsedEvent,
   JoinSessionResponse,
   OrderListItem,
   OrderListPublicPayload,
@@ -60,6 +64,102 @@ export class PlayComponent implements OnInit, OnDestroy {
   );
 
   protected readonly hasBuzzer = computed(() => this.state()?.currentBuzzHolderPlayerId === this.playerInfo?.playerId);
+
+  protected readonly jokerLabels = JOKER_LABELS;
+  protected readonly jokerIcons = JOKER_ICONS;
+  protected readonly jokerUsing = signal(false);
+  protected readonly jokerError = signal<string | null>(null);
+  protected readonly jokerToast = signal<JokerUsedEvent | null>(null);
+
+  /** Jokers m'appartenant en propre, ou appartenant à mon équipe (stock partagé) — voir
+   * FindUsableJokerGrantAsync côté backend, même règle de propriété reproduite ici pour l'affichage. */
+  protected readonly myJokerGrants = computed(() => {
+    const s = this.state();
+    if (!s) {
+      return [];
+    }
+    const myPlayerId = this.playerInfo?.playerId;
+    const myTeamId = s.players.find((p) => p.id === myPlayerId)?.teamId ?? null;
+    return s.jokerGrants.filter((g) => g.ownerPlayerId === myPlayerId || (myTeamId !== null && g.ownerTeamId === myTeamId));
+  });
+
+  /** Manches où une "bonne réponse immédiate" a un sens — même liste que SimultaneousAnswerFeatures côté
+   * backend (Seul au monde / Copier-coller), duplicuée ici pour piloter l'affichage du tiroir. */
+  private readonly simultaneousAnswerFeatures = ['qa-text', 'zoom-image', 'blind-test', 'image-guess', 'multiple-choice', 'order-list'];
+
+  /** Seuls les jokers dont la mécanique est déjà câblée côté client apparaissent dans le tiroir — les
+   * autres restent invisibles tant que leur lot n'est pas livré, même si le GM leur a donné des charges. */
+  private readonly implementedJokerTypes: JokerType[] = ['FiftyFifty', 'MeFirst', 'AloneInTheWorld', 'CopyPaste', 'Exchange'];
+
+  /// Thème en attente de lancement (statut ThemeReadyToLaunch) : le seul du plateau révélé mais encore
+  /// non résolu.
+  protected readonly readyToLaunchTheme = computed(() => {
+    const s = this.state();
+    return s?.themeBoard?.find((t) => t.isRevealed && t.resolution === 'Pending') ?? null;
+  });
+
+  protected readonly isThemeParticipant = computed(() => {
+    const s = this.state();
+    if (!s) {
+      return false;
+    }
+    const myPlayerId = this.playerInfo?.playerId;
+    const myTeamId = s.players.find((p) => p.id === myPlayerId)?.teamId ?? null;
+    return (
+      s.currentRoundParticipantPlayerIds.includes(myPlayerId) ||
+      (myTeamId !== null && s.currentRoundParticipantTeamIds.includes(myTeamId))
+    );
+  });
+
+  protected readonly usableJokers = computed(() => {
+    const q = this.question();
+    return this.myJokerGrants().filter((g) => {
+      if (!this.implementedJokerTypes.includes(g.type)) {
+        return false;
+      }
+      if (g.type === 'FiftyFifty') {
+        return this.qcmPayload() !== null && q?.isAnswerWindowOpen === true && !q?.hasAnswered;
+      }
+      if (g.type === 'MeFirst') {
+        return (
+          q?.isBuzzerMode === true &&
+          q?.isAnswerWindowOpen === true &&
+          (this.state()?.meFirstQuestionsRemaining ?? 0) === 0
+        );
+      }
+      if (g.type === 'AloneInTheWorld') {
+        const s = this.state();
+        return (
+          !!q &&
+          this.simultaneousAnswerFeatures.includes(q.featureTypeKey) &&
+          q.isAnswerWindowOpen &&
+          !q.hasAnswered &&
+          s?.aloneInTheWorldPlayerId == null &&
+          s?.aloneInTheWorldTeamId == null
+        );
+      }
+      if (g.type === 'CopyPaste') {
+        return !!q && this.simultaneousAnswerFeatures.includes(q.featureTypeKey) && q.isAnswerWindowOpen && !q.hasAnswered;
+      }
+      if (g.type === 'Exchange') {
+        return this.state()?.status === 'ThemeReadyToLaunch' && !this.isThemeParticipant();
+      }
+      return false;
+    });
+  });
+
+  /** Le verrou Moi d'abord est actif et je ne suis ni le détenteur ni un membre de son équipe — mon
+   * bouton buzzer doit rester grisé tant que le détenteur n'a pas lui-même buzzé sur cette question. */
+  protected readonly buzzerLockedByMeFirst = computed(() => {
+    const s = this.state();
+    if (!s || s.meFirstQuestionsRemaining === 0 || s.meFirstConsumedThisQuestion) {
+      return false;
+    }
+    const myPlayerId = this.playerInfo?.playerId;
+    const myTeamId = s.players.find((p) => p.id === myPlayerId)?.teamId ?? null;
+    const isHolder = s.meFirstHolderPlayerId === myPlayerId || (myTeamId !== null && s.meFirstHolderTeamId === myTeamId);
+    return !isHolder;
+  });
 
   protected readonly isConcernedByRandomDraw = computed(() => {
     const draw = this.state()?.activeRandomDraw;
@@ -327,6 +427,10 @@ export class PlayComponent implements OnInit, OnDestroy {
           s ? { ...s, players: s.players.map((p) => (p.id === player.id ? player : p)) } : s
         );
       });
+      this.signalrService.onJokerUsed((event) => {
+        this.jokerToast.set(event);
+        setTimeout(() => this.jokerToast.set(null), 4000);
+      });
     });
 
     // Filet de sécurité indépendant de SignalR : si un message temps réel est manqué (connexion
@@ -447,6 +551,48 @@ export class PlayComponent implements OnInit, OnDestroy {
         this.error.set(err.status === 409 ? 'Réponse déjà envoyée.' : "Échec de l'envoi de la réponse.");
       }
     });
+  }
+
+  protected useJoker(type: JokerType, targetPlayerId?: number): void {
+    if (this.jokerUsing()) {
+      return;
+    }
+
+    this.jokerUsing.set(true);
+    this.jokerError.set(null);
+
+    this.sessionService.useJoker(this.token, this.playerInfo.connectionToken, type, targetPlayerId).subscribe({
+      next: (state) => {
+        this.jokerUsing.set(false);
+        this.copyPastePickerOpen.set(false);
+        this.state.set(state);
+        // Le payload public filtré (options masquées côté serveur pour Cinquante-cinquante) vit dans
+        // PlayerQuestionDto, pas dans GameSessionStateDto — il faut le refetch séparément.
+        this.refreshQuestion();
+      },
+      error: (err) => {
+        this.jokerUsing.set(false);
+        this.jokerError.set(err.error ?? "Échec de l'utilisation du joker.");
+      }
+    });
+  }
+
+  /// Copier/coller a besoin d'un joueur cible : le clic sur le joker ouvre ce petit sélecteur au lieu
+  /// d'appeler useJoker() directement (contrairement aux 3 autres jokers déjà câblés, sans cible).
+  protected readonly copyPastePickerOpen = signal(false);
+
+  protected readonly copyPasteTargets = computed(() => {
+    const s = this.state();
+    const myPlayerId = this.playerInfo?.playerId;
+    return s ? s.players.filter((p) => p.id !== myPlayerId) : [];
+  });
+
+  protected openCopyPastePicker(): void {
+    this.copyPastePickerOpen.set(true);
+  }
+
+  protected cancelCopyPastePicker(): void {
+    this.copyPastePickerOpen.set(false);
   }
 
   protected submitRandomDrawGuess(): void {
