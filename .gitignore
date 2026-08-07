@@ -1,3 +1,5 @@
 .vs/
 *.user
 backend/wwwroot/
+deploy/logs/
+deploy/.publish-tmp/
