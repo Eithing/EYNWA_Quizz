@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { environment } from '../../../environments/environment';
@@ -36,7 +36,14 @@ export class AuthService {
   fetchCurrentUser(): void {
     this.http.get<CurrentUser>(`${environment.apiBaseUrl}/api/auth/me`).subscribe({
       next: (user) => this.currentUserSignal.set(user),
-      error: () => this.logout()
+      // Ne déconnecter que sur un vrai 401 (token invalide/expiré) : un hoquet réseau ou un backend
+      // momentanément indisponible (ex. redémarrage, "no healthy upstream" derrière Cloudflare) ne doit
+      // pas faire perdre la session d'un GM dont le JWT reste par ailleurs valide.
+      error: (err: unknown) => {
+        if (err instanceof HttpErrorResponse && err.status === 401) {
+          this.logout();
+        }
+      }
     });
   }
 

@@ -1499,6 +1499,20 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             return BadRequest("Aucune charge disponible pour ce joker.");
         }
 
+        // Décrémente la charge de façon atomique AVANT d'appliquer l'effet (UPDATE conditionné sur
+        // Charges > 0, en dehors du change tracker) : sans ça, deux utilisations concurrentes de la
+        // même charge (ex: un joker d'équipe utilisé par deux coéquipiers en même temps) peuvent
+        // toutes les deux passer la vérification ci-dessus et déclencher l'effet deux fois pour une
+        // seule charge décomptée. Si la ligne a déjà été consommée entre-temps, on s'arrête ici, avant
+        // tout effet.
+        var decremented = await db.JokerGrants
+            .Where(g => g.Id == grant.Id && g.Charges > 0)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(g => g.Charges, g => g.Charges - 1));
+        if (decremented == 0)
+        {
+            return BadRequest("Aucune charge disponible pour ce joker.");
+        }
+
         var (round, question) = GetCurrentRoundAndQuestion(quiz, session);
 
         var result = type switch
@@ -1513,10 +1527,14 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
 
         if (!result.Success)
         {
+            // L'effet a été refusé après coup (ex: fenêtre fermée entre la vérification et l'exécution) :
+            // on rend la charge décomptée ci-dessus plutôt que de la perdre pour rien.
+            await db.JokerGrants
+                .Where(g => g.Id == grant.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(g => g.Charges, g => g.Charges + 1));
             return BadRequest(result.Error);
         }
 
-        grant.Charges--;
         db.JokerUsageEvents.Add(new JokerUsageEvent
         {
             SessionId = session.Id,
@@ -1977,7 +1995,10 @@ public class SessionsController(QuizPartyDbContext db, FeatureEngineRegistry eng
             .Include(s => s.Players)
             .Include(s => s.Teams)
             .SingleOrDefaultAsync(s => s.InviteToken == token);
-        if (session is null)
+        // Lien d'invitation expiré : traité comme introuvable pour les joueurs (nouveaux arrivants
+        // comme sessions déjà en cours de sondage) — n'affecte pas l'accès du GM, qui passe par
+        // LoadOwnedSession et peut toujours superviser/clôturer une session au-delà de ce délai.
+        if (session is null || session.ExpiresAt < DateTime.UtcNow)
         {
             return null;
         }
