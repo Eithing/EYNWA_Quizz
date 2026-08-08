@@ -52,139 +52,6 @@
       </div>
     </div>
 
-    <app-ui-card>
-      <p class="host-live__invite-label">Lien d'invitation à partager :</p>
-      <div class="host-live__invite-row">
-        <code>{{ inviteUrl }}</code>
-        <button type="button" class="btn btn-secondary" (click)="copyInviteLink()">
-          {{ copied() ? 'Copié !' : 'Copier' }}
-        </button>
-      </div>
-    </app-ui-card>
-
-    <app-ui-card>
-      <h3>Outils</h3>
-
-      @if (s.activeRandomDraw; as draw) {
-        <app-random-draw-host-panel
-          [draw]="draw"
-          [players]="s.players"
-          [teams]="s.teams"
-          [error]="randomDrawError()"
-          (reveal)="revealRandomDraw()"
-          (close)="closeRandomDraw()"
-          (start)="onStartRandomDraw($event)"
-        />
-      } @else {
-        @if (s.activeStrawPoll; as poll) {
-          <app-strawpoll-host-panel
-            [poll]="poll"
-            [players]="s.players"
-            [teams]="s.teams"
-            [error]="strawPollError()"
-            (reveal)="revealStrawPollResults()"
-            (close)="closeStrawPoll()"
-            (start)="onStartStrawPoll($event)"
-          />
-        } @else {
-          <div class="host-live__controls">
-            <button type="button" class="btn btn-secondary" (click)="toggleRandomDrawForm()">🎲 Tirage aléatoire</button>
-            <button type="button" class="btn btn-secondary" (click)="toggleStrawPollForm()">📊 Sondage</button>
-          </div>
-
-          <app-random-draw-host-panel
-            [open]="randomDrawFormOpen()"
-            [players]="s.players"
-            [teams]="s.teams"
-            [error]="randomDrawError()"
-            (start)="onStartRandomDraw($event)"
-          />
-          <app-strawpoll-host-panel
-            [open]="strawPollFormOpen()"
-            [players]="s.players"
-            [teams]="s.teams"
-            [error]="strawPollError()"
-            (start)="onStartStrawPoll($event)"
-          />
-        }
-      }
-    </app-ui-card>
-
-    <app-ui-card>
-      <div class="host-live__teams-header">
-        <h3>Équipes {{ s.teams.length > 0 ? '(' + s.teams.length + ')' : '' }}</h3>
-        @if (!teamBuilderOpen()) {
-          <button type="button" class="btn btn-secondary" (click)="openTeamBuilder()">
-            {{ s.teams.length > 0 ? 'Modifier les équipes' : 'Créer des équipes' }}
-          </button>
-        }
-      </div>
-
-      @if (!teamBuilderOpen()) {
-        @if (s.teams.length === 0) {
-          <p class="host-live__hint">Aucune équipe créée — les manches se jouent en solo.</p>
-        } @else {
-          <ul class="host-live__teams">
-            @for (team of s.teams; track team.id) {
-              <li>
-                <div class="host-live__player-row">
-                  <span>{{ team.name }} — {{ team.playerIds.length }} joueur(s)</span>
-                  <div class="host-live__player-actions">
-                    <strong>{{ team.score }} pts</strong>
-                    <button type="button" class="host-live__edit-score-btn" title="Modifier les points" (click)="startAdjustTeamScore(team.id)">✎</button>
-                  </div>
-                </div>
-                @if (adjustingTeamId() === team.id) {
-                  <div class="host-live__score-adjust">
-                    <input type="number" placeholder="+/- points" [value]="teamAdjustDelta()" (input)="teamAdjustDelta.set($any($event.target).valueAsNumber)" />
-                    <input type="text" placeholder="Raison (optionnel)" [value]="teamAdjustReason()" (input)="teamAdjustReason.set($any($event.target).value)" />
-                    <button type="button" class="btn btn-primary" (click)="confirmAdjustTeamScore()">Valider</button>
-                    <button type="button" class="btn btn-secondary" (click)="cancelAdjustTeamScore()">Annuler</button>
-                  </div>
-                }
-              </li>
-            }
-          </ul>
-        }
-      } @else {
-        <app-team-builder [players]="s.players" [existingTeams]="s.teams" (save)="onSaveTeams($event)" (cancel)="cancelTeamBuilder()" />
-      }
-    </app-ui-card>
-
-    @if (s.status === 'Lobby') {
-      <app-ui-card>
-        <div class="host-live__teams-header">
-          <h3>Jokers</h3>
-          @if (!jokerEditorOpen()) {
-            <button type="button" class="btn btn-secondary" (click)="openJokerEditor()">Configurer les jokers</button>
-          }
-        </div>
-
-        @if (!jokerEditorOpen()) {
-          @if ((state()?.jokerGrants?.length ?? 0) === 0) {
-            <p class="host-live__hint">Aucun joker attribué — la partie se joue sans jokers.</p>
-          } @else {
-            <ul class="host-live__joker-summary">
-              @for (grant of state()?.jokerGrants ?? []; track grant.id) {
-                <li>
-                  <span>{{ jokerIcons[grant.type] }} {{ jokerLabels[grant.type] }}</span>
-                  <span>{{ grant.ownerTeamId !== null ? teamName(grant.ownerTeamId) : playerPseudo(grant.ownerPlayerId) }} — {{ grant.charges }}×</span>
-                </li>
-              }
-            </ul>
-          }
-        } @else {
-          <app-joker-grant-editor
-            [players]="s.players"
-            [teams]="s.teams"
-            [existingGrants]="s.jokerGrants"
-            (save)="onSaveJokerGrants($event)"
-            (cancel)="cancelJokerEditor()"
-          />
-        }
-      </app-ui-card>
-    }
-
     <div class="host-live__body">
       <app-ui-card>
         <h3>Question en cours</h3>
@@ -478,6 +345,15 @@
                 <div class="host-live__buzzer-actions">
                   <button type="button" class="btn btn-secondary" (click)="resolveBuzz(true)">✓ Correct</button>
                   <button type="button" class="btn btn-danger" (click)="resolveBuzz(false)">✕ Incorrect</button>
+                  <input
+                    type="number"
+                    min="1"
+                    class="host-live__penalty-input"
+                    title="Montant de la pénalité"
+                    [value]="penaltyDelta()"
+                    (input)="penaltyDelta.set($any($event.target).valueAsNumber || 1)"
+                  />
+                  <button type="button" class="btn btn-danger" (click)="penalizeBuzzHolder()">➖ Pénaliser</button>
                 </div>
               </div>
             } @else {
@@ -519,6 +395,7 @@
                 <div class="pending-answer__actions">
                   <button type="button" class="btn btn-secondary" [disabled]="answer.isCorrect === true" (click)="setAnswerVerdict(answer, true)">✓ Correct</button>
                   <button type="button" class="btn btn-danger" [disabled]="answer.isCorrect === false" (click)="setAnswerVerdict(answer, false)">✕ Incorrect</button>
+                  <button type="button" class="btn btn-danger" title="Pénaliser du montant réglé sur le buzzer" (click)="penalizeAnswer(answer)">➖ Pénaliser</button>
                 </div>
               </div>
             }
@@ -574,6 +451,137 @@
         }
       </app-ui-card>
     </div>
+
+    <app-ui-card>
+      <h3>Outils</h3>
+
+      @if (s.activeRandomDraw; as draw) {
+        <app-random-draw-host-panel
+          [draw]="draw"
+          [players]="s.players"
+          [teams]="s.teams"
+          [error]="randomDrawError()"
+          (reveal)="revealRandomDraw()"
+          (close)="closeRandomDraw()"
+          (start)="onStartRandomDraw($event)"
+        />
+      } @else {
+        @if (s.activeStrawPoll; as poll) {
+          <app-strawpoll-host-panel
+            [poll]="poll"
+            [players]="s.players"
+            [teams]="s.teams"
+            [error]="strawPollError()"
+            (reveal)="revealStrawPollResults()"
+            (close)="closeStrawPoll()"
+            (start)="onStartStrawPoll($event)"
+          />
+        } @else {
+          <div class="host-live__controls">
+            <button type="button" class="btn btn-secondary" (click)="toggleRandomDrawForm()">🎲 Tirage aléatoire</button>
+            <button type="button" class="btn btn-secondary" (click)="toggleStrawPollForm()">📊 Sondage</button>
+          </div>
+
+          <app-random-draw-host-panel
+            [open]="randomDrawFormOpen()"
+            [players]="s.players"
+            [teams]="s.teams"
+            [error]="randomDrawError()"
+            (start)="onStartRandomDraw($event)"
+          />
+          <app-strawpoll-host-panel
+            [open]="strawPollFormOpen()"
+            [players]="s.players"
+            [teams]="s.teams"
+            [error]="strawPollError()"
+            (start)="onStartStrawPoll($event)"
+          />
+        }
+      }
+    </app-ui-card>
+
+    <app-ui-card>
+      <div class="host-live__teams-header">
+        <h3>Équipes {{ s.teams.length > 0 ? '(' + s.teams.length + ')' : '' }}</h3>
+        @if (!teamBuilderOpen()) {
+          <button type="button" class="btn btn-secondary" (click)="openTeamBuilder()">
+            {{ s.teams.length > 0 ? 'Modifier les équipes' : 'Créer des équipes' }}
+          </button>
+        }
+      </div>
+
+      @if (!teamBuilderOpen()) {
+        @if (s.teams.length === 0) {
+          <p class="host-live__hint">Aucune équipe créée — les manches se jouent en solo.</p>
+        } @else {
+          <ul class="host-live__teams">
+            @for (team of s.teams; track team.id) {
+              <li>
+                <div class="host-live__player-row">
+                  <span>{{ team.name }} — {{ team.playerIds.length }} joueur(s)</span>
+                  <div class="host-live__player-actions">
+                    <strong>{{ team.score }} pts</strong>
+                    <button type="button" class="host-live__edit-score-btn" title="Modifier les points" (click)="startAdjustTeamScore(team.id)">✎</button>
+                  </div>
+                </div>
+                @if (adjustingTeamId() === team.id) {
+                  <div class="host-live__score-adjust">
+                    <input type="number" placeholder="+/- points" [value]="teamAdjustDelta()" (input)="teamAdjustDelta.set($any($event.target).valueAsNumber)" />
+                    <input type="text" placeholder="Raison (optionnel)" [value]="teamAdjustReason()" (input)="teamAdjustReason.set($any($event.target).value)" />
+                    <button type="button" class="btn btn-primary" (click)="confirmAdjustTeamScore()">Valider</button>
+                    <button type="button" class="btn btn-secondary" (click)="cancelAdjustTeamScore()">Annuler</button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <app-team-builder [players]="s.players" [existingTeams]="s.teams" (save)="onSaveTeams($event)" (cancel)="cancelTeamBuilder()" />
+      }
+    </app-ui-card>
+
+    <app-ui-card>
+      <div class="host-live__teams-header">
+        <h3>Jokers</h3>
+        @if (s.status === 'Lobby' && !jokerEditorOpen()) {
+          <button type="button" class="btn btn-secondary" (click)="openJokerEditor()">Configurer les jokers</button>
+        }
+      </div>
+
+      @if (!jokerEditorOpen()) {
+        @if ((state()?.jokerGrants?.length ?? 0) === 0) {
+          <p class="host-live__hint">Aucun joker attribué — la partie se joue sans jokers.</p>
+        } @else {
+          <ul class="host-live__joker-summary">
+            @for (grant of state()?.jokerGrants ?? []; track grant.id) {
+              <li>
+                <span [title]="jokerDescriptions[grant.type]">{{ jokerIcons[grant.type] }} {{ jokerLabels[grant.type] }}</span>
+                <span>{{ grant.ownerTeamId !== null ? teamName(grant.ownerTeamId) : playerPseudo(grant.ownerPlayerId) }} — {{ grant.charges }}× restant(s)</span>
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <app-joker-grant-editor
+          [players]="s.players"
+          [teams]="s.teams"
+          [existingGrants]="s.jokerGrants"
+          (save)="onSaveJokerGrants($event)"
+          (cancel)="cancelJokerEditor()"
+        />
+      }
+    </app-ui-card>
+
+    <app-ui-card>
+      <p class="host-live__invite-label">Lien d'invitation à partager :</p>
+      <div class="host-live__invite-row">
+        <code>{{ inviteUrl }}</code>
+        <button type="button" class="btn btn-secondary" (click)="copyInviteLink()">
+          {{ copied() ? 'Copié !' : 'Copier' }}
+        </button>
+      </div>
+    </app-ui-card>
   </div>
 } @else {
   <p>Chargement…</p>

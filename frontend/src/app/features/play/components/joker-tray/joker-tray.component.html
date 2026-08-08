@@ -17,7 +17,7 @@
         type="button"
         class="play__joker-btn"
         [disabled]="using()"
-        [title]="jokerLabels[grant.type]"
+        [title]="jokerLabels[grant.type] + ' — ' + jokerDescriptions[grant.type]"
         (click)="jokerClicked.emit(grant.type)"
       >
         <span class="play__joker-icon">{{ jokerIcons[grant.type] }}</span>

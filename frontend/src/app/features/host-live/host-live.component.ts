@@ -7,6 +7,7 @@ import {
   AnswerFeedItem,
   CurrentQuestionAdmin,
   GameSessionState,
+  JOKER_DESCRIPTIONS,
   JOKER_ICONS,
   JOKER_LABELS,
   JokerType,
@@ -60,6 +61,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected readonly jokerLabels = JOKER_LABELS;
   protected readonly jokerIcons = JOKER_ICONS;
+  protected readonly jokerDescriptions = JOKER_DESCRIPTIONS;
   protected readonly jokerEditorOpen = signal(false);
   protected readonly jokerToast = signal<JokerUsedEvent | null>(null);
 
@@ -288,7 +290,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   /// qu'un seul thème à la fois.
   protected readonly readyToLaunchTheme = computed(() => {
     const s = this.state();
-    return s?.themeBoard?.find((t) => t.isRevealed && t.resolution === 'Pending') ?? null;
+    return s?.themeBoard?.find((t) => t.subRoundId === s.currentThemeSubRoundId) ?? null;
   });
 
   protected readonly participantNames = computed(() => {
@@ -555,6 +557,36 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.sessionService.validateAnswer(this.sessionId, answer.id, isCorrect).subscribe(() => {
       this.refreshAnswerFeed();
       this.refreshCurrentQuestion();
+    });
+  }
+
+  /** Montant de pénalité proposé par défaut (1 point), éditable par l'hôte avant de cliquer — partagé par
+   * le buzzer et le feed de réponses en attente plutôt qu'un réglage par ligne. */
+  protected readonly penaltyDelta = signal(1);
+
+  protected penalizeBuzzHolder(): void {
+    const playerId = this.state()?.currentBuzzHolderPlayerId;
+    const delta = this.penaltyDelta();
+    if (playerId === null || playerId === undefined || delta <= 0) {
+      return;
+    }
+    this.sessionService.resolveBuzz(this.sessionId, false).subscribe((state) => {
+      this.applyState(state);
+      this.sessionService.adjustScore(this.sessionId, playerId, -delta, 'Pénalité buzzer').subscribe(() => this.refreshState());
+    });
+  }
+
+  protected penalizeAnswer(answer: AnswerFeedItem): void {
+    const delta = this.penaltyDelta();
+    if (delta <= 0) {
+      return;
+    }
+    this.sessionService.validateAnswer(this.sessionId, answer.id, false).subscribe(() => {
+      this.sessionService.adjustScore(this.sessionId, answer.playerId, -delta, 'Pénalité réponse').subscribe(() => {
+        this.refreshAnswerFeed();
+        this.refreshCurrentQuestion();
+        this.refreshState();
+      });
     });
   }
 

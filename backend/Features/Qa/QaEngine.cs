@@ -54,6 +54,22 @@ public class QaEngine : IFeatureEngine
 
     public bool IsManualValidation(string configJson) => ParseConfig(configJson).ValidationMode == "Manual";
 
+    /// <summary>En validation manuelle, Evaluate() ne calcule jamais rien (aucun matching automatique,
+    /// c'est au GM de juger) — sans ce hook, un clic "Correct" du GM sur une soumission à plusieurs champs
+    /// n'attribuerait que le barème d'UNE réponse au lieu de la somme des réponses attendues, exactement
+    /// comme le fait déjà Evaluate() en mode Auto via ExpectedAnswerMatching.Match/EffectivePoints.</summary>
+    public int? FixedManualValidationPoints(string payloadJson, string configJson)
+    {
+        var config = ParseConfig(configJson);
+        if (config.ValidationMode != "Manual")
+        {
+            return null;
+        }
+
+        var expectedAnswers = ParsePayload(payloadJson).ExpectedAnswersOrLegacy();
+        return expectedAnswers.Count == 0 ? config.Points : expectedAnswers.Sum(e => EffectivePoints(e, config.Points));
+    }
+
     /// <summary>En mode buzzer, gouverne le droit de re-buzzer après une mauvaise réponse (voir GetRetryCooldownSeconds).</summary>
     public bool AllowsRetryAfterWrongAnswer(string configJson) => ParseConfig(configJson).AllowRetry;
 

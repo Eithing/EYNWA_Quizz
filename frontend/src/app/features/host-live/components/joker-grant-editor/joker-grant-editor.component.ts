@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, input, output, signal } from '@angular/core';
-import { JOKER_ICONS, JOKER_LABELS, JOKER_TYPES, JokerGrant, JokerType, Player, Team } from '../../../../models/session.model';
+import { JOKER_DESCRIPTIONS, JOKER_ICONS, JOKER_LABELS, JOKER_TYPES, JokerGrant, JokerType, Player, Team } from '../../../../models/session.model';
 
 interface JokerOwner {
   kind: 'player' | 'team';
@@ -23,6 +23,7 @@ export class JokerGrantEditorComponent implements OnInit {
   protected readonly jokerTypes = JOKER_TYPES;
   protected readonly jokerLabels = JOKER_LABELS;
   protected readonly jokerIcons = JOKER_ICONS;
+  protected readonly jokerDescriptions = JOKER_DESCRIPTIONS;
 
   /** Clé "kind:id:type" -> charges en cours d'édition (pas encore enregistrées). */
   protected readonly jokerDraftCharges = signal<Record<string, number>>({});

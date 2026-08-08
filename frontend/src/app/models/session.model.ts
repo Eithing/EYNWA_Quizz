@@ -58,6 +58,16 @@ export const JOKER_ICONS: Record<JokerType, string> = {
   FiftyFifty: '5️⃣0️⃣'
 };
 
+/** Phrase courte pour l'infobulle au survol — rappel du joker en cours de partie, même si l'hôte est
+ * censé l'expliquer en début de partie. */
+export const JOKER_DESCRIPTIONS: Record<JokerType, string> = {
+  Exchange: "Vole la désignation d'un thème pas encore lancé.",
+  AloneInTheWorld: 'Sur cette question, seule ta réponse rapporte des points — les autres joueurs jouent pour rien.',
+  CopyPaste: "Copie la réponse d'un autre joueur, révélée seulement à la fin de la question.",
+  MeFirst: 'Priorité sur le buzzer pendant les 2 prochaines questions.',
+  FiftyFifty: 'Retire la moitié des mauvaises options du QCM, pour toi uniquement.'
+};
+
 /** Stock de charges d'un joker attribué à un joueur OU une équipe (jamais les deux). */
 export interface JokerGrant {
   id: number;
@@ -161,6 +171,8 @@ export interface GameSessionState {
   /** Vrai dès que le détenteur a buzzé sur la question courante — le verrou ne bloque alors plus les
    * autres joueurs pour le reste de cette question (retry classique). */
   meFirstConsumedThisQuestion: boolean;
+  /** Sous-manche (thème) désignée par ChooseTheme, en attente de LaunchTheme. */
+  currentThemeSubRoundId: number | null;
 }
 
 export interface CurrentQuestionAdmin {

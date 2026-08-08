@@ -38,7 +38,7 @@
   <div class="form-field">
     <label for="zoom-points-mode-override">Points pour cette question</label>
     <select id="zoom-points-mode-override" [value]="payload().pointsMode ?? ''" (change)="onPointsModeOverrideChange($any($event.target).value)">
-      <option value="">Suivre la manche ({{ roundPointsMode() === 'PerAnswer' ? 'Personnalisé' : 'Uniforme (dézoom)' }})</option>
+      <option value="">Suivre la manche</option>
       <option value="Uniform">Uniforme (dézoom)</option>
       <option value="PerAnswer">Personnalisé</option>
     </select>

@@ -57,6 +57,9 @@ public partial class SessionsController
 
         themeState.IsRevealed = true;
         session.CurrentThemeSubRoundId = subRoundId;
+        // Nouveau thème désigné : la fenêtre de vol Échange repart de zéro (le verrou précédent ne
+        // concernait que l'ancien thème).
+        session.ExchangeUsedForThemeSubRoundId = null;
         session.CurrentQuestionIndex = 0;
         // Ne démarre pas encore le minuteur : le thème est désigné mais reste en attente de lancement
         // explicite (voir /themes/{subRoundId}/launch) — fenêtre pendant laquelle le joker Échange peut

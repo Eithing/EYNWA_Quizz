@@ -315,6 +315,13 @@ public partial class SessionsController
             return (false, "Aucun thème en attente de lancement.", null, null);
         }
 
+        // Un seul Échange réussi par thème : sans cette garde, une équipe adverse pourrait revoler la
+        // désignation juste après, dans une guerre de vol sans fin qui gaspille les charges des deux côtés.
+        if (session.ExchangeUsedForThemeSubRoundId == session.CurrentThemeSubRoundId)
+        {
+            return (false, "Échange déjà utilisé sur ce thème.", null, null);
+        }
+
         var participants = await db.RoundParticipants.Where(rp => rp.SessionId == session.Id).ToListAsync();
         var isAlreadyParticipant = participants.Any(rp =>
             rp.PlayerId == player.Id || (player.TeamId is not null && rp.TeamId == player.TeamId));
@@ -335,6 +342,8 @@ public partial class SessionsController
         {
             session.TeamScoringEnabled = true;
         }
+
+        session.ExchangeUsedForThemeSubRoundId = session.CurrentThemeSubRoundId;
 
         return (true, null, subRound?.Title, null);
     }
@@ -453,7 +462,7 @@ public partial class SessionsController
             return false;
         }
 
-        return await ResolveCopyPasteAssignmentsAsync(session, round, question);
+        return await ResolveCopyPasteAssignmentsAsync(session, round, question, engine);
     }
 
     /// <summary>Applique chaque assignation Copier/coller en attente sur cette question : la réponse du
@@ -461,7 +470,7 @@ public partial class SessionsController
     /// compris. Si la cible n'a pas répondu, le copieur reste sans réponse (rien à copier). Utilisé à la
     /// fermeture de fenêtre (poll) et systématiquement avant de quitter une question, en filet de sécurité
     /// pour le cas où le GM cliquerait "Suivant" avant qu'aucun poll n'ait eu l'occasion de résoudre.</summary>
-    private async Task<bool> ResolveCopyPasteAssignmentsAsync(GameSession session, Round round, Question question)
+    private async Task<bool> ResolveCopyPasteAssignmentsAsync(GameSession session, Round round, Question question, IFeatureEngine engine)
     {
         if (!SimultaneousAnswerFeatures.Contains(round.FeatureTypeKey))
         {
@@ -473,6 +482,8 @@ public partial class SessionsController
         {
             return false;
         }
+
+        var usesRankBasedScoring = engine.UsesRankBasedScoring(round.ConfigJson);
 
         foreach (var assignment in assignments)
         {
@@ -508,8 +519,25 @@ public partial class SessionsController
                 }
 
                 copierAnswer.IsCorrect = targetAnswer.IsCorrect;
-                copierAnswer.PendingPoints = targetAnswer.PendingPoints;
-                copierAnswer.PointsAwarded = targetAnswer.PointsAwarded;
+                copierAnswer.IsFromCopyPasteJoker = true;
+
+                // En dégressif par rang, le copieur n'hérite QUE de la réponse/du verdict de la cible —
+                // ses points dépendent de SON PROPRE rang au moment où sa copie se résout, jamais d'un
+                // clone verbatim des points de la cible (qui a pu répondre bien plus tôt, à un rang
+                // meilleur).
+                if (usesRankBasedScoring && targetAnswer.IsCorrect == true)
+                {
+                    var rank = await db.Answers.CountAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id
+                        && a.IsCorrect == true && a.PlayerId != assignment.CopierPlayerId);
+                    copierAnswer.PendingPoints = engine.PointsForRank(round.ConfigJson, rank);
+                    copierAnswer.PointsAwarded = copierAnswer.PendingPoints;
+                }
+                else
+                {
+                    copierAnswer.PendingPoints = targetAnswer.PendingPoints;
+                    copierAnswer.PointsAwarded = targetAnswer.PointsAwarded;
+                }
+
                 copierAnswer.TeamId = session.TeamScoringEnabled ? copier?.TeamId : null;
                 copierAnswer.ValidatedByGmAt = DateTime.UtcNow;
             }

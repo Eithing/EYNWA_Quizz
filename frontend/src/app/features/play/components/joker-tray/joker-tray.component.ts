@@ -1,5 +1,5 @@
 import { Component, input, output } from '@angular/core';
-import { JOKER_ICONS, JOKER_LABELS, JokerGrant, JokerType, JokerUsedEvent } from '../../../../models/session.model';
+import { JOKER_DESCRIPTIONS, JOKER_ICONS, JOKER_LABELS, JokerGrant, JokerType, JokerUsedEvent } from '../../../../models/session.model';
 
 @Component({
   selector: 'app-joker-tray',
@@ -16,4 +16,5 @@ export class JokerTrayComponent {
 
   protected readonly jokerLabels = JOKER_LABELS;
   protected readonly jokerIcons = JOKER_ICONS;
+  protected readonly jokerDescriptions = JOKER_DESCRIPTIONS;
 }

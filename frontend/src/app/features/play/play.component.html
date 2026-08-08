@@ -438,6 +438,7 @@
                       autocomplete="off"
                       [value]="value"
                       (input)="onAnswerFieldChange(i, $any($event.target).value)"
+                      (keydown.enter)="onAnswerFieldEnter($event, i)"
                     />
                   }
                   <button type="submit" class="btn btn-primary" [disabled]="submitting()">

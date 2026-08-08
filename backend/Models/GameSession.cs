@@ -64,6 +64,11 @@ public class GameSession
     /// manche courante), null tant qu'aucun thème n'a été choisi ou qu'on n'est pas dans une manche à thèmes.</summary>
     public int? CurrentThemeSubRoundId { get; set; }
 
+    /// <summary>Joker Échange déjà utilisé avec succès sur ce thème (SubRound.Id) — verrouille
+    /// définitivement contre tout Échange suivant sur le même thème, pour éviter une guerre de vol
+    /// sans fin entre équipes. Remis à null à chaque nouveau ChooseTheme.</summary>
+    public int? ExchangeUsedForThemeSubRoundId { get; set; }
+
     /// <summary>Manche "à quoi pense l'autre" : joueur désigné par le GM pour répondre en privé à la
     /// question courante (peut changer à chaque question). Null tant qu'aucun n'est désigné.</summary>
     public int? CurrentAnswererPlayerId { get; set; }

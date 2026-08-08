@@ -7,7 +7,7 @@
       <strong>{{ owner.label }}</strong>
       <div class="host-live__joker-owner-inputs">
         @for (type of jokerTypes; track type) {
-          <label>
+          <label [title]="jokerDescriptions[type]">
             <span>{{ jokerIcons[type] }} {{ jokerLabels[type] }}</span>
             <input
               type="number"

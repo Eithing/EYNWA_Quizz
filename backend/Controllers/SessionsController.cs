@@ -521,7 +521,7 @@ public partial class SessionsController(QuizPartyDbContext db, FeatureEngineRegi
             // Même filet de sécurité pour le joker Copier/coller : si le GM clique "Suivant" avant qu'un
             // poll n'ait eu l'occasion de résoudre une assignation en attente, elle est appliquée ici avec
             // les réponses telles qu'elles sont au moment de quitter la question (voir ResolveCopyPasteAssignmentsIfDueAsync).
-            await ResolveCopyPasteAssignmentsAsync(session, leavingRound, leavingQuestion);
+            await ResolveCopyPasteAssignmentsAsync(session, leavingRound, leavingQuestion, leavingEngine);
         }
 
         var rounds = TopLevelRounds(quiz);
@@ -880,7 +880,7 @@ public partial class SessionsController(QuizPartyDbContext db, FeatureEngineRegi
             session.CurrentAnswererPlayerId, answererPseudo, activeRandomDraw, activeStrawPoll,
             jokerGrants, session.AloneInTheWorldPlayerId, session.AloneInTheWorldTeamId,
             session.MeFirstHolderPlayerId, session.MeFirstHolderTeamId, session.MeFirstQuestionsRemaining,
-            session.MeFirstConsumedThisQuestion);
+            session.MeFirstConsumedThisQuestion, session.CurrentThemeSubRoundId);
     }
 
     private async Task<PlayerDto> BuildPlayerDto(int playerId, int sessionId, string? pseudo)

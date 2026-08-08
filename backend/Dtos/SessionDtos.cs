@@ -106,7 +106,11 @@ public record GameSessionStateDto(
     int MeFirstQuestionsRemaining = 0,
     /// <summary>Vrai dès que le détenteur a buzzé sur la question courante — le verrou ne bloque alors
     /// plus les autres joueurs pour le reste de cette question (retry classique).</summary>
-    bool MeFirstConsumedThisQuestion = false);
+    bool MeFirstConsumedThisQuestion = false,
+    /// <summary>Sous-manche (thème) désignée par ChooseTheme, en attente de LaunchTheme — permet au
+    /// frontend de savoir sans ambiguïté LEQUEL des thèmes révélés est réellement prêt à lancer (voir
+    /// readyToLaunchTheme côté host-live.component.ts).</summary>
+    int? CurrentThemeSubRoundId = null);
 
 public record CurrentQuestionAdminDto(
     int RoundId,

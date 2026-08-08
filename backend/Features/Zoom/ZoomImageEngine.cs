@@ -93,7 +93,7 @@ public class ZoomImageEngine : IFeatureEngine
         }
 
         var expectedAnswers = payload.ExpectedAnswersOrLegacy();
-        return expectedAnswers.Count > 0 ? (expectedAnswers[0].Points ?? 0) : 0;
+        return expectedAnswers.Sum(e => e.Points ?? 0);
     }
 
     public string BuildPublicPayloadJson(string payloadJson) => BuildPublicPayloadJson(payloadJson, "{}");

@@ -42,4 +42,9 @@ public class Answer
     public AnswerValidationMode ValidationMode { get; set; }
     public DateTime? ValidatedByGmAt { get; set; }
     public DateTime SubmittedAt { get; set; }
+
+    /// <summary>Vrai si cette réponse vient d'une résolution du joker Copier/coller — exclue du calcul
+    /// "tout le monde a répondu correctement" (AllPlayersAnsweredCorrectly) pour ne pas déclencher une
+    /// avance automatique non voulue par le GM ; reste comptée normalement pour le score.</summary>
+    public bool IsFromCopyPasteJoker { get; set; }
 }

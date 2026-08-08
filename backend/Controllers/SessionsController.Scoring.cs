@@ -385,7 +385,11 @@ public partial class SessionsController
         // Bloqué si aucune tentative n'est en cours (correcte ou en attente de validation manuelle),
         // ou si la dernière tentative était fausse mais qu'aucun nouvel essai n'est encore permis.
         var hasAnswered = lastAnswer is not null && !await CanPlayerRetryAsync(session, question, engine, round.ConfigJson, lastAnswer);
-        var correctFinders = await GetCorrectFinderPseudos(session.Id, question.Id);
+        // Caché tant que la fenêtre de réponse est ouverte : révéler en direct qui a déjà (bien) répondu
+        // trahit l'information et fausse les décisions des jokers Copier/coller / Seul au monde (voir qui
+        // répond avant de choisir sa cible ou d'utiliser le joker). La vue GM (GetCurrentQuestionFull) n'a
+        // pas cette restriction — l'hôte doit toujours tout voir en direct.
+        var correctFinders = state.IsAnswerWindowOpen ? [] : await GetCorrectFinderPseudos(session.Id, question.Id);
         var eligiblePlayerIds = await GetEligiblePlayerIdsAsync(session, round);
         var isSpectator = player is null || !eligiblePlayerIds.Contains(player.Id);
 
@@ -882,16 +886,21 @@ public partial class SessionsController
             return false;
         }
 
+        // Une réponse comblée par le joker Copier/coller ne compte jamais comme "réponse obtenue" pour
+        // cette avance automatique : c'est une révélation différée, pas une vraie réponse à temps — sans
+        // cette exclusion, sa résolution (à la fermeture de fenêtre) peut compléter silencieusement "tout
+        // le monde a répondu" et faire avancer la partie sans que le GM ait rien décidé.
+
         // Mode buzzer : une course, pas un test collectif — une seule bonne réponse clôt la question
         // (mais toujours restreinte aux participants éligibles de cette manche).
         if (!engineRegistry.Get(round.FeatureTypeKey).RequiresAllPlayersToAnswer(round.ConfigJson))
         {
             return await db.Answers.AnyAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id
-                && a.IsCorrect == true && eligiblePlayerIds.Contains(a.PlayerId));
+                && a.IsCorrect == true && !a.IsFromCopyPasteJoker && eligiblePlayerIds.Contains(a.PlayerId));
         }
 
         var correctCount = await db.Answers.CountAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id
-            && a.IsCorrect == true && eligiblePlayerIds.Contains(a.PlayerId));
+            && a.IsCorrect == true && !a.IsFromCopyPasteJoker && eligiblePlayerIds.Contains(a.PlayerId));
         return correctCount >= eligiblePlayerIds.Count;
     }
 

@@ -161,7 +161,18 @@
 
 .host-live__buzzer-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+
+.host-live__penalty-input {
+  width: 52px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 0.8rem;
 }
 
 .host-live__finders {

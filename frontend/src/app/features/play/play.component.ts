@@ -107,7 +107,7 @@ export class PlayComponent implements OnInit, OnDestroy {
   /// non résolu.
   protected readonly readyToLaunchTheme = computed(() => {
     const s = this.state();
-    return s?.themeBoard?.find((t) => t.isRevealed && t.resolution === 'Pending') ?? null;
+    return s?.themeBoard?.find((t) => t.subRoundId === s.currentThemeSubRoundId) ?? null;
   });
 
   protected readonly isThemeParticipant = computed(() => {
@@ -472,6 +472,19 @@ export class PlayComponent implements OnInit, OnDestroy {
       updated[index] = value;
       return updated;
     });
+  }
+
+  /** Entrée sur un champ qui n'est pas le dernier passe au suivant au lieu d'envoyer tout le formulaire
+   * (sinon la réponse est envoyée avec les champs suivants encore vides, irrattrapable). Entrée sur le
+   * dernier champ envoie normalement (comportement natif du <form>, pas intercepté). */
+  protected onAnswerFieldEnter(event: Event, index: number): void {
+    if (index >= this.answers().length - 1) {
+      return;
+    }
+    event.preventDefault();
+    const currentInput = event.target as HTMLInputElement;
+    const nextInput = currentInput.closest('form')?.querySelectorAll('input')[index + 1] as HTMLInputElement | undefined;
+    nextInput?.focus();
   }
 
   /** qa-text/zoom-image/blind-test/image-guess (et partner-guess phase 2, toujours à 1 champ) : une seule
