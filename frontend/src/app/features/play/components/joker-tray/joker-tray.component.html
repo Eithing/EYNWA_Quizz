@@ -1,0 +1,32 @@
+@if (toast(); as t) {
+  <div class="play__joker-toast">
+    {{ jokerIcons[t.type] }} <strong>{{ t.actorLabel }}</strong> a utilisé {{ jokerLabels[t.type] }}
+    @if (t.targetLabel) {
+      sur <strong>{{ t.targetLabel }}</strong>
+    }
+    @if (t.detail) {
+      — {{ t.detail }}
+    }
+  </div>
+}
+
+@if (jokers().length > 0) {
+  <div class="play__joker-tray">
+    @for (grant of jokers(); track grant.id) {
+      <button
+        type="button"
+        class="play__joker-btn"
+        [disabled]="using()"
+        [title]="jokerLabels[grant.type]"
+        (click)="jokerClicked.emit(grant.type)"
+      >
+        <span class="play__joker-icon">{{ jokerIcons[grant.type] }}</span>
+        <span class="play__joker-label">{{ jokerLabels[grant.type] }}</span>
+        <span class="play__joker-charges">{{ grant.charges }}×</span>
+      </button>
+    }
+  </div>
+  @if (error(); as message) {
+    <p class="play__error">{{ message }}</p>
+  }
+}

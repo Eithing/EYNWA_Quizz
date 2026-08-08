@@ -66,120 +66,46 @@
       <h3>Outils</h3>
 
       @if (s.activeRandomDraw; as draw) {
-        <div class="host-live__tool-status">
-          <p class="host-live__qa-text">
-            🎲 {{ draw.label || 'Tirage aléatoire' }}
-            <span class="host-live__qa-hint">({{ draw.minValue }}–{{ draw.maxValue }})</span>
-          </p>
-
-          @if (draw.mode === 'Reveal') {
-            <p class="host-live__target-banner">Valeur tirée : <strong>{{ draw.drawnValue }}</strong></p>
-          } @else {
-            <p class="host-live__hint">
-              {{ draw.submittedPlayerIds.length }} devinette(s) reçue(s)
-              @if (draw.concernedPlayerIds.length > 0) {
-                sur {{ draw.concernedPlayerIds.length }} joueur(s) concerné(s)
-              }
-            </p>
-
-            @if (!draw.isResolved) {
-              <button type="button" class="btn btn-primary" (click)="revealRandomDraw()">Révéler</button>
-            } @else {
-              <p class="host-live__target-banner">Valeur tirée : <strong>{{ draw.drawnValue }}</strong></p>
-              <ol class="host-live__tool-results">
-                @for (entry of draw.results ?? []; track entry.playerId) {
-                  <li [class.host-live__tool-result--winner]="entry.isWinner">
-                    <span>#{{ entry.rank + 1 }} {{ entry.playerPseudo }}</span>
-                    <span>{{ entry.guessValue }}</span>
-                  </li>
-                }
-              </ol>
-            }
-          }
-
-          <button type="button" class="btn btn-secondary" (click)="closeRandomDraw()">Fermer</button>
-        </div>
-      } @else if (s.activeStrawPoll) {
-        @if (s.activeStrawPoll; as poll) {
-          <div class="host-live__tool-status">
-            <p class="host-live__qa-text">📊 {{ poll.question }}</p>
-            <p class="host-live__hint">
-              {{ poll.votedPlayerIds.length }} vote(s) reçu(s)
-              @if (poll.concernedPlayerIds.length > 0) {
-                sur {{ poll.concernedPlayerIds.length }} joueur(s) concerné(s)
-              }
-            </p>
-
-            @if (!poll.resultsRevealed) {
-              <button type="button" class="btn btn-primary" (click)="revealStrawPollResults()">Révéler les résultats</button>
-            } @else {
-              <ul class="host-live__tool-results">
-                @for (result of poll.results ?? []; track result.optionId) {
-                  <li>
-                    <span>{{ strawPollOptionText(poll, result.optionId) }}</span>
-                    <span>{{ result.voteCount }} vote(s)</span>
-                  </li>
-                }
-              </ul>
-            }
-
-            <button type="button" class="btn btn-secondary" (click)="closeStrawPoll()">Fermer</button>
-          </div>
-        }
+        <app-random-draw-host-panel
+          [draw]="draw"
+          [players]="s.players"
+          [teams]="s.teams"
+          [error]="randomDrawError()"
+          (reveal)="revealRandomDraw()"
+          (close)="closeRandomDraw()"
+          (start)="onStartRandomDraw($event)"
+        />
       } @else {
-        <div class="host-live__controls">
-          <button type="button" class="btn btn-secondary" (click)="toggleRandomDrawForm()">🎲 Tirage aléatoire</button>
-          <button type="button" class="btn btn-secondary" (click)="toggleStrawPollForm()">📊 Sondage</button>
-        </div>
-
-        @if (randomDrawFormOpen()) {
-          <div class="host-live__tool-form">
-            <div class="form-field">
-              <label for="random-draw-label">Motif (affiché aux joueurs)</label>
-              <input id="random-draw-label" type="text" placeholder="Ex : Qui commence ?" [value]="randomDrawLabel()" (input)="randomDrawLabel.set($any($event.target).value)" />
-            </div>
-
-            <div class="host-live__score-adjust">
-              <select [value]="randomDrawMode()" (change)="randomDrawMode.set($any($event.target).value)">
-                <option value="Reveal">Affichage direct (pas de devinette)</option>
-                <option value="GuessWinner">Deviner — un gagnant</option>
-                <option value="GuessRanking">Deviner — classement complet</option>
-              </select>
-              <input type="number" placeholder="Min" [value]="randomDrawMin()" (input)="randomDrawMin.set($any($event.target).valueAsNumber)" />
-              <input type="number" placeholder="Max" [value]="randomDrawMax()" (input)="randomDrawMax.set($any($event.target).valueAsNumber)" />
-            </div>
-
-            @if (randomDrawError(); as message) {
-              <p class="host-live__error">{{ message }}</p>
-            }
-
-            <app-participant-selector [players]="s.players" [teams]="s.teams" confirmLabel="Lancer le tirage" (confirm)="onStartRandomDraw($event)" />
+        @if (s.activeStrawPoll; as poll) {
+          <app-strawpoll-host-panel
+            [poll]="poll"
+            [players]="s.players"
+            [teams]="s.teams"
+            [error]="strawPollError()"
+            (reveal)="revealStrawPollResults()"
+            (close)="closeStrawPoll()"
+            (start)="onStartStrawPoll($event)"
+          />
+        } @else {
+          <div class="host-live__controls">
+            <button type="button" class="btn btn-secondary" (click)="toggleRandomDrawForm()">🎲 Tirage aléatoire</button>
+            <button type="button" class="btn btn-secondary" (click)="toggleStrawPollForm()">📊 Sondage</button>
           </div>
-        }
 
-        @if (strawPollFormOpen()) {
-          <div class="host-live__tool-form">
-            <div class="form-field">
-              <label for="strawpoll-question">Question</label>
-              <input id="strawpoll-question" type="text" [value]="strawPollQuestion()" (input)="strawPollQuestion.set($any($event.target).value)" />
-            </div>
-
-            <div class="form-field">
-              <label for="strawpoll-options">Options (une par ligne)</label>
-              <textarea id="strawpoll-options" rows="4" [value]="strawPollOptionsText()" (input)="strawPollOptionsText.set($any($event.target).value)"></textarea>
-            </div>
-
-            <label class="host-live__checkbox">
-              <input type="checkbox" [checked]="strawPollAllowMultiple()" (change)="strawPollAllowMultiple.set($any($event.target).checked)" />
-              Autoriser plusieurs choix par joueur
-            </label>
-
-            @if (strawPollError(); as message) {
-              <p class="host-live__error">{{ message }}</p>
-            }
-
-            <app-participant-selector [players]="s.players" [teams]="s.teams" confirmLabel="Lancer le sondage" (confirm)="onStartStrawPoll($event)" />
-          </div>
+          <app-random-draw-host-panel
+            [open]="randomDrawFormOpen()"
+            [players]="s.players"
+            [teams]="s.teams"
+            [error]="randomDrawError()"
+            (start)="onStartRandomDraw($event)"
+          />
+          <app-strawpoll-host-panel
+            [open]="strawPollFormOpen()"
+            [players]="s.players"
+            [teams]="s.teams"
+            [error]="strawPollError()"
+            (start)="onStartStrawPoll($event)"
+          />
         }
       }
     </app-ui-card>
@@ -221,34 +147,7 @@
           </ul>
         }
       } @else {
-        <div class="host-live__team-builder">
-          @for (draft of teamDrafts(); track $index; let draftIndex = $index) {
-            <div class="host-live__team-draft">
-              <input type="text" placeholder="Nom de l'équipe" [value]="draft.name" (input)="renameTeamDraft(draftIndex, $any($event.target).value)" />
-              <button type="button" class="host-live__edit-score-btn" title="Supprimer cette équipe" (click)="removeTeamDraft(draftIndex)">✕</button>
-              <div class="host-live__team-draft-players">
-                @for (player of s.players; track player.id) {
-                  <label [class.host-live__team-draft-player--disabled]="isPlayerTakenByOtherDraft(draftIndex, player.id)">
-                    <input
-                      type="checkbox"
-                      [checked]="draft.playerIds.has(player.id)"
-                      [disabled]="isPlayerTakenByOtherDraft(draftIndex, player.id)"
-                      (change)="toggleDraftPlayer(draftIndex, player.id)"
-                    />
-                    {{ player.pseudo }}
-                  </label>
-                }
-              </div>
-            </div>
-          }
-          <div class="host-live__team-builder-actions">
-            <button type="button" class="btn btn-secondary" (click)="addTeamDraft()">+ Ajouter une équipe</button>
-            <div>
-              <button type="button" class="btn btn-secondary" (click)="cancelTeamBuilder()">Annuler</button>
-              <button type="button" class="btn btn-primary" (click)="saveTeams()">Enregistrer les équipes</button>
-            </div>
-          </div>
-        </div>
+        <app-team-builder [players]="s.players" [existingTeams]="s.teams" (save)="onSaveTeams($event)" (cancel)="cancelTeamBuilder()" />
       }
     </app-ui-card>
 
@@ -275,36 +174,13 @@
             </ul>
           }
         } @else {
-          <p class="host-live__hint">
-            {{ jokerOwners().length === 0 ? "Aucun joueur n'a encore rejoint." : 'Charges par ' + (state()?.teams?.length ? 'équipe' : 'joueur') + '.' }}
-          </p>
-          <div class="host-live__joker-editor">
-            @for (owner of jokerOwners(); track owner.kind + owner.id) {
-              <div class="host-live__joker-owner-row">
-                <strong>{{ owner.label }}</strong>
-                <div class="host-live__joker-owner-inputs">
-                  @for (type of jokerTypes; track type) {
-                    <label>
-                      <span>{{ jokerIcons[type] }} {{ jokerLabels[type] }}</span>
-                      <input
-                        type="number"
-                        min="0"
-                        [value]="jokerDraftValue(owner, type)"
-                        (input)="setJokerDraftValue(owner, type, $any($event.target).valueAsNumber || 0)"
-                      />
-                    </label>
-                  }
-                </div>
-              </div>
-            }
-          </div>
-          <div class="host-live__team-builder-actions">
-            <div></div>
-            <div>
-              <button type="button" class="btn btn-secondary" (click)="cancelJokerEditor()">Annuler</button>
-              <button type="button" class="btn btn-primary" (click)="saveJokerGrants()">Enregistrer les jokers</button>
-            </div>
-          </div>
+          <app-joker-grant-editor
+            [players]="s.players"
+            [teams]="s.teams"
+            [existingGrants]="s.jokerGrants"
+            (save)="onSaveJokerGrants($event)"
+            (cancel)="cancelJokerEditor()"
+          />
         }
       </app-ui-card>
     }
@@ -449,11 +325,18 @@
             <img [src]="imageUrl" alt="Image de la question" class="host-live__image" />
           }
 
+          @if (currentZoomComment(); as zoomComment) {
+            <p class="host-live__qa-text">{{ zoomComment }}</p>
+          }
+
           @if (currentQaPayload(); as qa) {
             <p class="host-live__qa-text">{{ qa.questionText }}</p>
           }
 
           @if (currentBlindTestPayload(); as blindTest) {
+            @if (blindTest.comment) {
+              <p class="host-live__qa-text">{{ blindTest.comment }}</p>
+            }
             <app-audio-player
               [audioUrl]="blindTest.resolvedAudioUrl"
               [syncElapsedSeconds]="question.secondsElapsedTotal"
@@ -463,6 +346,9 @@
           }
 
           @if (currentImageGuessPayload(); as imageGuess) {
+            @if (imageGuess.comment) {
+              <p class="host-live__qa-text">{{ imageGuess.comment }}</p>
+            }
             <img [src]="imageGuess.resolvedImageUrl" alt="Image de la question" class="host-live__image" />
           }
 

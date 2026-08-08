@@ -10,8 +10,6 @@ import {
   ClosestGuessPublicPayload,
   GameSessionState,
   ImageGuessPublicPayload,
-  JOKER_ICONS,
-  JOKER_LABELS,
   JokerType,
   JokerUsedEvent,
   JoinSessionResponse,
@@ -27,6 +25,10 @@ type PartnerGuessPublicPayload = QaPublicPayload;
 import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
 import { ZoomViewerComponent } from '../../shared/components/zoom-viewer/zoom-viewer.component';
+import { CopyPastePickerComponent } from './components/copy-paste-picker/copy-paste-picker.component';
+import { JokerTrayComponent } from './components/joker-tray/joker-tray.component';
+import { RandomDrawOverlayComponent } from './components/random-draw-overlay/random-draw-overlay.component';
+import { StrawPollOverlayComponent } from './components/strawpoll-overlay/strawpoll-overlay.component';
 
 const POLL_INTERVAL_MS = 800;
 
@@ -42,7 +44,19 @@ function joinWithEt(values: number[]): string {
 
 @Component({
   selector: 'app-play',
-  imports: [FormsModule, UiCardComponent, ZoomViewerComponent, AudioPlayerComponent, CdkDropList, CdkDrag, CdkDragHandle],
+  imports: [
+    FormsModule,
+    UiCardComponent,
+    ZoomViewerComponent,
+    AudioPlayerComponent,
+    CdkDropList,
+    CdkDrag,
+    CdkDragHandle,
+    JokerTrayComponent,
+    CopyPastePickerComponent,
+    RandomDrawOverlayComponent,
+    StrawPollOverlayComponent
+  ],
   templateUrl: './play.component.html',
   styleUrl: './play.component.scss'
 })
@@ -65,8 +79,6 @@ export class PlayComponent implements OnInit, OnDestroy {
 
   protected readonly hasBuzzer = computed(() => this.state()?.currentBuzzHolderPlayerId === this.playerInfo?.playerId);
 
-  protected readonly jokerLabels = JOKER_LABELS;
-  protected readonly jokerIcons = JOKER_ICONS;
   protected readonly jokerUsing = signal(false);
   protected readonly jokerError = signal<string | null>(null);
   protected readonly jokerToast = signal<JokerUsedEvent | null>(null);
@@ -187,11 +199,9 @@ export class PlayComponent implements OnInit, OnDestroy {
     return poll ? poll.votedPlayerIds.includes(this.playerInfo?.playerId) : false;
   });
 
-  protected readonly randomDrawGuessValue = signal(0);
   protected readonly randomDrawGuessSubmitting = signal(false);
   protected readonly randomDrawGuessError = signal<string | null>(null);
 
-  protected readonly strawPollSelectedOptionIds = signal<string[]>([]);
   protected readonly strawPollVoteSubmitting = signal(false);
   protected readonly strawPollVoteError = signal<string | null>(null);
 
@@ -369,27 +379,6 @@ export class PlayComponent implements OnInit, OnDestroy {
         this.answers.set(Array.from({ length: count }, () => ''));
       }
     });
-
-    // Vide le formulaire de devinette/vote dès qu'un nouvel outil host démarre (ID différent).
-    let lastRandomDrawId: number | null = null;
-    effect(() => {
-      const id = this.state()?.activeRandomDraw?.id ?? null;
-      if (id !== lastRandomDrawId) {
-        lastRandomDrawId = id;
-        this.randomDrawGuessValue.set(this.state()?.activeRandomDraw?.minValue ?? 0);
-        this.randomDrawGuessError.set(null);
-      }
-    });
-
-    let lastStrawPollId: number | null = null;
-    effect(() => {
-      const id = this.state()?.activeStrawPoll?.id ?? null;
-      if (id !== lastStrawPollId) {
-        lastStrawPollId = id;
-        this.strawPollSelectedOptionIds.set([]);
-        this.strawPollVoteError.set(null);
-      }
-    });
   }
 
   ngOnInit(): void {
@@ -553,6 +542,16 @@ export class PlayComponent implements OnInit, OnDestroy {
     });
   }
 
+  /// Copier/coller a besoin d'un joueur cible : un clic sur ce joker ouvre le sélecteur au lieu d'appeler
+  /// useJoker() directement (contrairement aux autres jokers déjà câblés, sans cible).
+  protected onJokerClicked(type: JokerType): void {
+    if (type === 'CopyPaste') {
+      this.openCopyPastePicker();
+    } else {
+      this.useJoker(type);
+    }
+  }
+
   protected useJoker(type: JokerType, targetPlayerId?: number): void {
     if (this.jokerUsing()) {
       return;
@@ -577,8 +576,6 @@ export class PlayComponent implements OnInit, OnDestroy {
     });
   }
 
-  /// Copier/coller a besoin d'un joueur cible : le clic sur le joker ouvre ce petit sélecteur au lieu
-  /// d'appeler useJoker() directement (contrairement aux 3 autres jokers déjà câblés, sans cible).
   protected readonly copyPastePickerOpen = signal(false);
 
   protected readonly copyPasteTargets = computed(() => {
@@ -595,7 +592,7 @@ export class PlayComponent implements OnInit, OnDestroy {
     this.copyPastePickerOpen.set(false);
   }
 
-  protected submitRandomDrawGuess(): void {
+  protected submitRandomDrawGuess(value: number): void {
     if (this.randomDrawGuessSubmitting()) {
       return;
     }
@@ -603,7 +600,7 @@ export class PlayComponent implements OnInit, OnDestroy {
     this.randomDrawGuessSubmitting.set(true);
     this.randomDrawGuessError.set(null);
 
-    this.sessionService.submitRandomDrawGuess(this.token, this.playerInfo.connectionToken, this.randomDrawGuessValue()).subscribe({
+    this.sessionService.submitRandomDrawGuess(this.token, this.playerInfo.connectionToken, value).subscribe({
       next: (state) => {
         this.randomDrawGuessSubmitting.set(false);
         this.state.set(state);
@@ -615,32 +612,15 @@ export class PlayComponent implements OnInit, OnDestroy {
     });
   }
 
-  protected toggleStrawPollOption(optionId: string): void {
-    const poll = this.state()?.activeStrawPoll;
-    if (!poll) {
-      return;
-    }
-    this.strawPollSelectedOptionIds.update((selected) => {
-      if (selected.includes(optionId)) {
-        return selected.filter((id) => id !== optionId);
-      }
-      if (!poll.allowMultipleVotes) {
-        return [optionId];
-      }
-      return [...selected, optionId];
-    });
-  }
-
-  protected submitStrawPollVote(): void {
-    const selected = this.strawPollSelectedOptionIds();
-    if (selected.length === 0 || this.strawPollVoteSubmitting()) {
+  protected submitStrawPollVote(selectedOptionIds: string[]): void {
+    if (selectedOptionIds.length === 0 || this.strawPollVoteSubmitting()) {
       return;
     }
 
     this.strawPollVoteSubmitting.set(true);
     this.strawPollVoteError.set(null);
 
-    this.sessionService.submitStrawPollVote(this.token, this.playerInfo.connectionToken, selected).subscribe({
+    this.sessionService.submitStrawPollVote(this.token, this.playerInfo.connectionToken, selectedOptionIds).subscribe({
       next: (state) => {
         this.strawPollVoteSubmitting.set(false);
         this.state.set(state);
@@ -650,10 +630,6 @@ export class PlayComponent implements OnInit, OnDestroy {
         this.strawPollVoteError.set(err.error ?? "Échec de l'envoi du vote.");
       }
     });
-  }
-
-  protected strawPollOptionText(poll: NonNullable<GameSessionState['activeStrawPoll']>, optionId: string): string {
-    return poll.options.find((o) => o.id === optionId)?.text ?? '';
   }
 
   protected buzz(): void {

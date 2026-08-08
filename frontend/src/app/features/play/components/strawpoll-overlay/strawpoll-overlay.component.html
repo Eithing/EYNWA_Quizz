@@ -1,0 +1,39 @@
+<div class="play__tool-overlay">
+  <app-ui-card>
+    <p class="play__question-text">📊 {{ poll().question }}</p>
+
+    @if (!poll().resultsRevealed) {
+      @if (hasVoted()) {
+        <p class="play__hint">Vote envoyé — en attente des résultats…</p>
+      } @else {
+        <form class="play__form play__form--multi" (submit)="$event.preventDefault(); submit()">
+          @for (option of poll().options; track option.id) {
+            <label class="play__qcm-option">
+              <input
+                type="checkbox"
+                [checked]="selectedOptionIds().includes(option.id)"
+                (change)="toggleOption(option.id)"
+              />
+              <span>{{ option.text }}</span>
+            </label>
+          }
+          <button type="submit" class="btn btn-primary" [disabled]="submitting() || selectedOptionIds().length === 0">
+            {{ submitting() ? 'Envoi…' : 'Voter' }}
+          </button>
+        </form>
+
+        @if (error(); as message) {
+          <p class="play__error">{{ message }}</p>
+        }
+      }
+    } @else {
+      <ul class="play__order-list play__order-list--reveal">
+        @for (result of poll().results ?? []; track result.optionId) {
+          <li>
+            <span>{{ optionText(result.optionId) }} — {{ result.voteCount }} vote(s)</span>
+          </li>
+        }
+      </ul>
+    }
+  </app-ui-card>
+</div>

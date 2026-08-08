@@ -1,0 +1,58 @@
+@if (draw(); as d) {
+  <div class="host-live__tool-status">
+    <p class="host-live__qa-text">
+      🎲 {{ d.label || 'Tirage aléatoire' }}
+      <span class="host-live__qa-hint">({{ d.minValue }}–{{ d.maxValue }})</span>
+    </p>
+
+    @if (d.mode === 'Reveal') {
+      <p class="host-live__target-banner">Valeur tirée : <strong>{{ d.drawnValue }}</strong></p>
+    } @else {
+      <p class="host-live__hint">
+        {{ d.submittedPlayerIds.length }} devinette(s) reçue(s)
+        @if (d.concernedPlayerIds.length > 0) {
+          sur {{ d.concernedPlayerIds.length }} joueur(s) concerné(s)
+        }
+      </p>
+
+      @if (!d.isResolved) {
+        <button type="button" class="btn btn-primary" (click)="reveal.emit()">Révéler</button>
+      } @else {
+        <p class="host-live__target-banner">Valeur tirée : <strong>{{ d.drawnValue }}</strong></p>
+        <ol class="host-live__tool-results">
+          @for (entry of d.results ?? []; track entry.playerId) {
+            <li [class.host-live__tool-result--winner]="entry.isWinner">
+              <span>#{{ entry.rank + 1 }} {{ entry.playerPseudo }}</span>
+              <span>{{ entry.guessValue }}</span>
+            </li>
+          }
+        </ol>
+      }
+    }
+
+    <button type="button" class="btn btn-secondary" (click)="close.emit()">Fermer</button>
+  </div>
+} @else if (open()) {
+  <div class="host-live__tool-form">
+    <div class="form-field">
+      <label for="random-draw-label">Motif (affiché aux joueurs)</label>
+      <input id="random-draw-label" type="text" placeholder="Ex : Qui commence ?" [value]="label()" (input)="label.set($any($event.target).value)" />
+    </div>
+
+    <div class="host-live__score-adjust">
+      <select [value]="mode()" (change)="mode.set($any($event.target).value)">
+        <option value="Reveal">Affichage direct (pas de devinette)</option>
+        <option value="GuessWinner">Deviner — un gagnant</option>
+        <option value="GuessRanking">Deviner — classement complet</option>
+      </select>
+      <input type="number" placeholder="Min" [value]="min()" (input)="min.set($any($event.target).valueAsNumber)" />
+      <input type="number" placeholder="Max" [value]="max()" (input)="max.set($any($event.target).valueAsNumber)" />
+    </div>
+
+    @if (error(); as message) {
+      <p class="host-live__error">{{ message }}</p>
+    }
+
+    <app-participant-selector [players]="players()" [teams]="teams()" confirmLabel="Lancer le tirage" (confirm)="submitStart($event)" />
+  </div>
+}

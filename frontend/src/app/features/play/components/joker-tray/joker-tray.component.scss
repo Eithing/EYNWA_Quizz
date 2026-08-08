@@ -1,0 +1,51 @@
+.play__joker-toast {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.play__joker-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.play__joker-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.play__joker-icon {
+  font-size: 1.1rem;
+}
+
+.play__joker-charges {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.play__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}

@@ -14,14 +14,25 @@
       <p class="zoom-question-editor__hint">Clique sur l'image pour définir le point de zoom.</p>
     }
 
-    <label class="zoom-question-editor__upload">
-      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" (change)="onFileSelected($event)" [disabled]="uploading()" />
-      <span>{{ uploading() ? 'Envoi en cours…' : payload().imageUrl ? "Changer l'image" : 'Choisir une image' }}</span>
-    </label>
+    <app-media-upload-field
+      accept="image/png,image/jpeg,image/webp,image/gif"
+      [hasFile]="!!payload().imageUrl"
+      chooseLabel="Choisir une image"
+      changeLabel="Changer l'image"
+      errorMessage="Échec de l'envoi de l'image."
+      (uploaded)="onImageUploaded($event)"
+    />
+  </div>
 
-    @if (uploadError(); as message) {
-      <p class="zoom-question-editor__error">{{ message }}</p>
-    }
+  <div class="form-field">
+    <label for="zoom-comment">Commentaire / consigne (optionnel)</label>
+    <textarea
+      id="zoom-comment"
+      rows="2"
+      placeholder="Ex : Donnez le nom de l'objet et du jeu"
+      [value]="payload().comment"
+      (input)="onCommentChange($any($event.target).value)"
+    ></textarea>
   </div>
 
   <div class="form-field">

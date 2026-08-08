@@ -9,34 +9,33 @@ import {
   GameSessionState,
   JOKER_ICONS,
   JOKER_LABELS,
-  JOKER_TYPES,
   JokerType,
   JokerUsedEvent,
   Player,
-  RandomDrawMode,
   RoundPreview,
   Team
 } from '../../models/session.model';
 import { AudioPlayerComponent } from '../../shared/components/audio-player/audio-player.component';
 import { ParticipantSelection, ParticipantSelectorComponent } from '../../shared/components/participant-selector/participant-selector.component';
 import { UiCardComponent } from '../../shared/components/ui-card/ui-card.component';
+import { JokerGrantEditorComponent } from './components/joker-grant-editor/joker-grant-editor.component';
+import { RandomDrawHostPanelComponent, RandomDrawStartPayload } from './components/random-draw-host-panel/random-draw-host-panel.component';
+import { StrawPollHostPanelComponent, StrawPollStartPayload } from './components/strawpoll-host-panel/strawpoll-host-panel.component';
+import { TeamBuilderComponent } from './components/team-builder/team-builder.component';
 
 const POLL_INTERVAL_MS = 1000;
 
-interface TeamDraft {
-  name: string;
-  playerIds: Set<number>;
-}
-
-interface JokerOwner {
-  kind: 'player' | 'team';
-  id: number;
-  label: string;
-}
-
 @Component({
   selector: 'app-host-live',
-  imports: [UiCardComponent, AudioPlayerComponent, ParticipantSelectorComponent],
+  imports: [
+    UiCardComponent,
+    AudioPlayerComponent,
+    ParticipantSelectorComponent,
+    TeamBuilderComponent,
+    JokerGrantEditorComponent,
+    RandomDrawHostPanelComponent,
+    StrawPollHostPanelComponent
+  ],
   templateUrl: './host-live.component.html',
   styleUrl: './host-live.component.scss'
 })
@@ -58,40 +57,19 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   protected readonly teamAdjustReason = signal('');
 
   protected readonly teamBuilderOpen = signal(false);
-  protected readonly teamDrafts = signal<TeamDraft[]>([]);
 
-  protected readonly jokerTypes = JOKER_TYPES;
   protected readonly jokerLabels = JOKER_LABELS;
   protected readonly jokerIcons = JOKER_ICONS;
   protected readonly jokerEditorOpen = signal(false);
-  /** Clé "kind:id:type" -> charges en cours d'édition (pas encore enregistrées). */
-  protected readonly jokerDraftCharges = signal<Record<string, number>>({});
   protected readonly jokerToast = signal<JokerUsedEvent | null>(null);
-
-  protected readonly jokerOwners = computed<JokerOwner[]>(() => {
-    const s = this.state();
-    if (!s) {
-      return [];
-    }
-    return s.teams.length > 0
-      ? s.teams.map((t) => ({ kind: 'team' as const, id: t.id, label: t.name }))
-      : s.players.map((p) => ({ kind: 'player' as const, id: p.id, label: p.pseudo }));
-  });
 
   protected readonly themeSelectorOpenId = signal<number | null>(null);
   protected readonly partnerGuessSelectorOpen = signal(false);
 
   protected readonly randomDrawFormOpen = signal(false);
-  protected readonly randomDrawMode = signal<RandomDrawMode>('Reveal');
-  protected readonly randomDrawLabel = signal('');
-  protected readonly randomDrawMin = signal(1);
-  protected readonly randomDrawMax = signal(100);
   protected readonly randomDrawError = signal<string | null>(null);
 
   protected readonly strawPollFormOpen = signal(false);
-  protected readonly strawPollQuestion = signal('');
-  protected readonly strawPollOptionsText = signal('');
-  protected readonly strawPollAllowMultiple = signal(false);
   protected readonly strawPollError = signal<string | null>(null);
 
   protected readonly pendingRoundImageUrl = computed(() => {
@@ -158,6 +136,18 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     }
   });
 
+  protected readonly currentZoomComment = computed(() => {
+    const question = this.currentQuestion();
+    if (!question || question.featureTypeKey !== 'zoom-image') {
+      return null;
+    }
+    try {
+      return (JSON.parse(question.payloadJson) as { comment?: string }).comment || null;
+    } catch {
+      return null;
+    }
+  });
+
   protected readonly currentQaPayload = computed(() => {
     const question = this.currentQuestion();
     if (!question || question.featureTypeKey !== 'qa-text') {
@@ -176,7 +166,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
       return null;
     }
     try {
-      const parsed = JSON.parse(question.payloadJson) as { audioUrl: string; acceptedAnswers: string[] };
+      const parsed = JSON.parse(question.payloadJson) as { audioUrl: string; acceptedAnswers: string[]; comment?: string };
       return { ...parsed, resolvedAudioUrl: this.mediaService.resolveUrl(parsed.audioUrl) };
     } catch {
       return null;
@@ -189,7 +179,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
       return null;
     }
     try {
-      const parsed = JSON.parse(question.payloadJson) as { imageUrl: string; acceptedAnswers: string[] };
+      const parsed = JSON.parse(question.payloadJson) as { imageUrl: string; acceptedAnswers: string[]; comment?: string };
       return { ...parsed, resolvedImageUrl: this.mediaService.resolveUrl(parsed.imageUrl) };
     } catch {
       return null;
@@ -487,28 +477,19 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.randomDrawFormOpen.update((open) => !open);
   }
 
-  protected onStartRandomDraw(selection: ParticipantSelection): void {
-    if (this.randomDrawMin() >= this.randomDrawMax()) {
+  protected onStartRandomDraw(payload: RandomDrawStartPayload): void {
+    if (payload.min >= payload.max) {
       this.randomDrawError.set('La valeur minimale doit être strictement inférieure à la valeur maximale.');
       return;
     }
 
     this.randomDrawError.set(null);
     this.sessionService
-      .startRandomDraw(
-        this.sessionId,
-        this.randomDrawMode(),
-        this.randomDrawLabel(),
-        this.randomDrawMin(),
-        this.randomDrawMax(),
-        selection.playerIds,
-        selection.teamIds
-      )
+      .startRandomDraw(this.sessionId, payload.mode, payload.label, payload.min, payload.max, payload.selection.playerIds, payload.selection.teamIds)
       .subscribe({
         next: (state) => {
           this.applyState(state);
           this.randomDrawFormOpen.set(false);
-          this.randomDrawLabel.set('');
         },
         error: (err) => this.randomDrawError.set(err.error ?? "Échec du lancement du tirage.")
       });
@@ -527,13 +508,13 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.strawPollFormOpen.update((open) => !open);
   }
 
-  protected onStartStrawPoll(selection: ParticipantSelection): void {
-    const options = this.strawPollOptionsText()
+  protected onStartStrawPoll(payload: StrawPollStartPayload): void {
+    const options = payload.optionsText
       .split('\n')
       .map((o) => o.trim())
       .filter((o) => o.length > 0);
 
-    if (!this.strawPollQuestion().trim()) {
+    if (!payload.question.trim()) {
       this.strawPollError.set('Question requise.');
       return;
     }
@@ -544,13 +525,11 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
     this.strawPollError.set(null);
     this.sessionService
-      .startStrawPoll(this.sessionId, this.strawPollQuestion(), options, this.strawPollAllowMultiple(), selection.playerIds, selection.teamIds)
+      .startStrawPoll(this.sessionId, payload.question, options, payload.allowMultiple, payload.selection.playerIds, payload.selection.teamIds)
       .subscribe({
         next: (state) => {
           this.applyState(state);
           this.strawPollFormOpen.set(false);
-          this.strawPollQuestion.set('');
-          this.strawPollOptionsText.set('');
         },
         error: (err) => this.strawPollError.set(err.error ?? 'Échec du lancement du sondage.')
       });
@@ -562,10 +541,6 @@ export class HostLiveComponent implements OnInit, OnDestroy {
 
   protected closeStrawPoll(): void {
     this.sessionService.closeStrawPoll(this.sessionId).subscribe((state) => this.applyState(state));
-  }
-
-  protected strawPollOptionText(poll: NonNullable<GameSessionState['activeStrawPoll']>, optionId: string): string {
-    return poll.options.find((o) => o.id === optionId)?.text ?? '';
   }
 
   protected resolveOrderListMediaUrl(url: string): string {
@@ -660,12 +635,6 @@ export class HostLiveComponent implements OnInit, OnDestroy {
   }
 
   protected openTeamBuilder(): void {
-    const existing = this.state()?.teams ?? [];
-    this.teamDrafts.set(
-      existing.length > 0
-        ? existing.map((t) => ({ name: t.name, playerIds: new Set(t.playerIds) }))
-        : [{ name: '', playerIds: new Set() }]
-    );
     this.teamBuilderOpen.set(true);
   }
 
@@ -673,64 +642,14 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.teamBuilderOpen.set(false);
   }
 
-  protected addTeamDraft(): void {
-    this.teamDrafts.update((drafts) => [...drafts, { name: '', playerIds: new Set() }]);
-  }
-
-  protected removeTeamDraft(index: number): void {
-    this.teamDrafts.update((drafts) => drafts.filter((_, i) => i !== index));
-  }
-
-  protected renameTeamDraft(index: number, name: string): void {
-    this.teamDrafts.update((drafts) => drafts.map((d, i) => (i === index ? { ...d, name } : d)));
-  }
-
-  protected toggleDraftPlayer(index: number, playerId: number): void {
-    this.teamDrafts.update((drafts) =>
-      drafts.map((d, i) => {
-        if (i !== index) {
-          return d;
-        }
-        const playerIds = new Set(d.playerIds);
-        playerIds.has(playerId) ? playerIds.delete(playerId) : playerIds.add(playerId);
-        return { ...d, playerIds };
-      })
-    );
-  }
-
-  protected isPlayerTakenByOtherDraft(index: number, playerId: number): boolean {
-    return this.teamDrafts().some((d, i) => i !== index && d.playerIds.has(playerId));
-  }
-
-  protected saveTeams(): void {
-    const teams = this.teamDrafts()
-      .filter((d) => d.name.trim().length > 0)
-      .map((d) => ({ name: d.name.trim(), playerIds: [...d.playerIds] }));
-
+  protected onSaveTeams(teams: { name: string; playerIds: number[] }[]): void {
     this.sessionService.setTeams(this.sessionId, teams).subscribe((state) => {
       this.applyState(state);
       this.teamBuilderOpen.set(false);
     });
   }
 
-  private jokerDraftKey(owner: JokerOwner, type: JokerType): string {
-    return `${owner.kind}:${owner.id}:${type}`;
-  }
-
   protected openJokerEditor(): void {
-    const grants = this.state()?.jokerGrants ?? [];
-    const draft: Record<string, number> = {};
-
-    for (const owner of this.jokerOwners()) {
-      for (const type of this.jokerTypes) {
-        const existing = grants.find(
-          (g) => g.type === type && (owner.kind === 'player' ? g.ownerPlayerId === owner.id : g.ownerTeamId === owner.id)
-        );
-        draft[this.jokerDraftKey(owner, type)] = existing?.charges ?? 0;
-      }
-    }
-
-    this.jokerDraftCharges.set(draft);
     this.jokerEditorOpen.set(true);
   }
 
@@ -738,24 +657,7 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.jokerEditorOpen.set(false);
   }
 
-  protected jokerDraftValue(owner: JokerOwner, type: JokerType): number {
-    return this.jokerDraftCharges()[this.jokerDraftKey(owner, type)] ?? 0;
-  }
-
-  protected setJokerDraftValue(owner: JokerOwner, type: JokerType, value: number): void {
-    this.jokerDraftCharges.update((draft) => ({ ...draft, [this.jokerDraftKey(owner, type)]: Math.max(0, value) }));
-  }
-
-  protected saveJokerGrants(): void {
-    const grants = this.jokerOwners().flatMap((owner) =>
-      this.jokerTypes.map((type) => ({
-        type,
-        playerId: owner.kind === 'player' ? owner.id : null,
-        teamId: owner.kind === 'team' ? owner.id : null,
-        charges: this.jokerDraftValue(owner, type)
-      }))
-    );
-
+  protected onSaveJokerGrants(grants: { type: JokerType; playerId: number | null; teamId: number | null; charges: number }[]): void {
     this.sessionService.setJokerGrants(this.sessionId, grants).subscribe((state) => {
       this.applyState(state);
       this.jokerEditorOpen.set(false);

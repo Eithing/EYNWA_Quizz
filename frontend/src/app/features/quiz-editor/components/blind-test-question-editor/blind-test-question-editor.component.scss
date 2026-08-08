@@ -3,30 +3,3 @@
   flex-direction: column;
   gap: 14px;
 }
-
-.blind-test-question-editor__upload {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px dashed var(--border-strong);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.85rem;
-  width: fit-content;
-
-  &:hover {
-    border-color: var(--accent);
-    color: var(--text-primary);
-  }
-
-  input {
-    display: none;
-  }
-}
-
-.blind-test-question-editor__error {
-  color: var(--danger);
-  font-size: 0.85rem;
-}

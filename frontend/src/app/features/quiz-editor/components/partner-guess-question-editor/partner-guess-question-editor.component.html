@@ -1,12 +1,23 @@
 <div class="partner-guess-question-editor">
   <div class="form-field">
-    <label for="pg-question-text">Question</label>
+    <label for="pg-question-text">Question (posée au 1er joueur, qui répond en privé)</label>
     <textarea
       id="pg-question-text"
       rows="3"
       placeholder="Ex : Quel est ton film préféré ?"
       [value]="payload().questionText"
       (input)="onQuestionTextChange($any($event.target).value)"
+    ></textarea>
+  </div>
+
+  <div class="form-field">
+    <label for="pg-guesser-question-text">Question pour le binôme (reformulée, optionnel)</label>
+    <textarea
+      id="pg-guesser-question-text"
+      rows="3"
+      placeholder="Ex : Quel est le film préféré de ton binôme ? (vide = reprend la question ci-dessus)"
+      [value]="payload().guesserQuestionText"
+      (input)="onGuesserQuestionTextChange($any($event.target).value)"
     ></textarea>
   </div>
 

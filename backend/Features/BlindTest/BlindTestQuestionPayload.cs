@@ -13,6 +13,10 @@ public class BlindTestQuestionPayload
 
     public List<ExpectedAnswer> ExpectedAnswers { get; set; } = [];
 
+    /// <summary>Commentaire/consigne optionnel affiché à côté du lecteur audio (ex: "Soyez précis").
+    /// Vide par défaut.</summary>
+    public string Comment { get; set; } = "";
+
     public List<ExpectedAnswer> ExpectedAnswersOrLegacy() =>
         ExpectedAnswers.Count > 0
             ? ExpectedAnswers

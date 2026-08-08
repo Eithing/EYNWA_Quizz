@@ -30,6 +30,10 @@ public class ZoomRoundConfig
     public int RankMaxPoints { get; set; } = 100;
     public int RankPointsDecrement { get; set; } = 10;
 
+    /// <summary>Plancher de points en scoring au rang — le dégressif ne descend jamais sous cette valeur,
+    /// même pour un rang très éloigné. 0 par défaut (comportement historique).</summary>
+    public int RankMinPoints { get; set; }
+
     /// <summary>"Uniform" (défaut, la dégressivité du dézoom s'applique normalement) ou "PerAnswer" (chaque
     /// réponse attendue porte son propre nombre de points fixe, qui REMPLACE la dégressivité du dézoom pour
     /// cette manche — les deux mécaniques ne se cumulent pas).</summary>

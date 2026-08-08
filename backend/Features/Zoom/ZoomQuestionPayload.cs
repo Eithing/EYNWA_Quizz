@@ -25,6 +25,10 @@ public class ZoomQuestionPayload
     /// Null = suit le réglage par défaut de la manche (ZoomRoundConfig.PointsMode).</summary>
     public string? PointsMode { get; set; }
 
+    /// <summary>Commentaire/consigne optionnel affiché à côté de l'image (ex: "Donnez le nom de l'objet et
+    /// du jeu"). Vide par défaut.</summary>
+    public string Comment { get; set; } = "";
+
     public List<ExpectedAnswer> ExpectedAnswersOrLegacy() =>
         ExpectedAnswers.Count > 0
             ? ExpectedAnswers

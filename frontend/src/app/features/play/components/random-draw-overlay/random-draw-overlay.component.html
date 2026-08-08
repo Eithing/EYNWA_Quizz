@@ -1,0 +1,40 @@
+<div class="play__tool-overlay">
+  <app-ui-card>
+    <p class="play__question-text">🎲 {{ draw().label || 'Tirage aléatoire' }}</p>
+    <p class="play__hint">Entre {{ draw().minValue }} et {{ draw().maxValue }}</p>
+
+    @if (draw().mode === 'Reveal') {
+      <p class="play__reveal-target">Résultat : <strong>{{ draw().drawnValue }}</strong></p>
+    } @else if (hasSubmitted()) {
+      @if (!draw().isResolved) {
+        <p class="play__hint">Devinette envoyée — en attente de la révélation…</p>
+      } @else {
+        <p class="play__reveal-target">Valeur tirée : <strong>{{ draw().drawnValue }}</strong></p>
+        <ol class="play__order-list play__order-list--reveal">
+          @for (entry of draw().results ?? []; track entry.playerId) {
+            <li [class.play__order-list-item--chained]="entry.isWinner">
+              <span>#{{ entry.rank + 1 }} {{ entry.playerPseudo }} — {{ entry.guessValue }}</span>
+            </li>
+          }
+        </ol>
+      }
+    } @else {
+      <form class="play__form" (submit)="$event.preventDefault(); submit()">
+        <input
+          type="number"
+          [min]="draw().minValue"
+          [max]="draw().maxValue"
+          [value]="guessValue()"
+          (input)="guessValue.set($any($event.target).valueAsNumber)"
+        />
+        <button type="submit" class="btn btn-primary" [disabled]="submitting()">
+          {{ submitting() ? 'Envoi…' : 'Valider' }}
+        </button>
+      </form>
+
+      @if (error(); as message) {
+        <p class="play__error">{{ message }}</p>
+      }
+    }
+  </app-ui-card>
+</div>

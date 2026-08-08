@@ -1,6 +1,7 @@
-import { Component, computed, effect, input, output, signal } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { QcmOptionDraft, QcmOptionsEditorComponent } from '../qcm-options-editor/qcm-options-editor.component';
+import { PointsMode, roundPointsModeFrom, syncPayloadFromJson } from '../question-editor-payload.util';
 
 interface QcmQuestionPayload {
   questionText: string;
@@ -24,34 +25,13 @@ export class QcmQuestionEditorComponent {
   readonly configJson = input<string>('{}');
   readonly payloadJsonChange = output<string>();
 
-  protected readonly payload = signal<QcmQuestionPayload>(defaultPayload());
+  protected readonly payload = syncPayloadFromJson(this.payloadJson, defaultPayload);
 
   /** Réglage par défaut de la manche (round-config), avant surcharge éventuelle par cette question. */
-  protected readonly roundPointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
-    try {
-      const parsed = JSON.parse(this.configJson());
-      return parsed.pointsMode === 'PerAnswer' ? 'PerAnswer' : 'Uniform';
-    } catch {
-      return 'Uniform';
-    }
-  });
+  protected readonly roundPointsMode = computed<PointsMode>(() => roundPointsModeFrom(this.configJson()));
 
   /** Mode réellement appliqué à cette question : sa propre surcharge si renseignée, sinon celui de la manche. */
-  protected readonly effectivePointsMode = computed<'Uniform' | 'PerAnswer'>(
-    () => this.payload().pointsModeOverride ?? this.roundPointsMode()
-  );
-
-  constructor() {
-    effect(() => this.payload.set(this.parse(this.payloadJson())));
-  }
-
-  private parse(json: string): QcmQuestionPayload {
-    try {
-      return { ...defaultPayload(), ...JSON.parse(json) };
-    } catch {
-      return defaultPayload();
-    }
-  }
+  protected readonly effectivePointsMode = computed<PointsMode>(() => this.payload().pointsModeOverride ?? this.roundPointsMode());
 
   private emit(): void {
     this.payloadJsonChange.emit(JSON.stringify(this.payload()));

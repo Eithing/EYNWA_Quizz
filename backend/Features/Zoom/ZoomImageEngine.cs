@@ -77,7 +77,23 @@ public class ZoomImageEngine : IFeatureEngine
     public int PointsForRank(string configJson, int correctAnswerRank)
     {
         var config = ParseConfig(configJson);
-        return RankScoring.PointsForRank(config.RankMaxPoints, config.RankPointsDecrement, correctAnswerRank);
+        return RankScoring.PointsForRank(config.RankMaxPoints, config.RankPointsDecrement, correctAnswerRank, config.RankMinPoints);
+    }
+
+    /// <summary>En mode "PerAnswer", les points sont fixés par la réponse attendue et ne dépendent pas du
+    /// palier de zoom courant — mais Evaluate() ne calcule rien en validation manuelle (voir plus haut), donc
+    /// sans ce hook ComputePointsIfCorrect (SessionsController) retomberait à tort sur le barème du dézoom.</summary>
+    public int? FixedManualValidationPoints(string payloadJson, string configJson)
+    {
+        var payload = ParsePayload(payloadJson);
+        var config = ParseConfig(configJson);
+        if ((payload.PointsMode ?? config.PointsMode) != "PerAnswer")
+        {
+            return null;
+        }
+
+        var expectedAnswers = payload.ExpectedAnswersOrLegacy();
+        return expectedAnswers.Count > 0 ? (expectedAnswers[0].Points ?? 0) : 0;
     }
 
     public string BuildPublicPayloadJson(string payloadJson) => BuildPublicPayloadJson(payloadJson, "{}");
@@ -104,7 +120,8 @@ public class ZoomImageEngine : IFeatureEngine
                 zoomFocusX = payload.ZoomFocusPoint.X,
                 zoomFocusY = payload.ZoomFocusPoint.Y,
                 expectedAnswerCount = Math.Max(1, expectedAnswers.Count),
-                expectedAnswerPoints
+                expectedAnswerPoints,
+                comment = payload.Comment
             },
             PublicJsonOptions);
     }

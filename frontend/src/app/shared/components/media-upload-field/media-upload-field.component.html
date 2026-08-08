@@ -1,0 +1,8 @@
+<label class="media-upload-field">
+  <input type="file" [accept]="accept()" (change)="onFileSelected($event)" [disabled]="uploading()" />
+  <span>{{ uploading() ? 'Envoi en cours…' : hasFile() ? changeLabel() : chooseLabel() }}</span>
+</label>
+
+@if (uploadError(); as message) {
+  <p class="media-upload-field__error">{{ message }}</p>
+}

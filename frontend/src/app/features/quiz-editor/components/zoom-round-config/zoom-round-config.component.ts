@@ -18,6 +18,7 @@ interface ZoomRoundConfig {
   rankBasedScoring: boolean;
   rankMaxPoints: number;
   rankPointsDecrement: number;
+  rankMinPoints: number;
   pointsMode: 'Uniform' | 'PerAnswer';
 }
 
@@ -33,6 +34,7 @@ function defaultConfig(): ZoomRoundConfig {
     rankBasedScoring: false,
     rankMaxPoints: 100,
     rankPointsDecrement: 10,
+    rankMinPoints: 0,
     pointsMode: 'Uniform'
   };
 }
@@ -126,6 +128,11 @@ export class ZoomRoundConfigComponent {
 
   protected onRankPointsDecrementChange(value: number): void {
     this.config.update((c) => ({ ...c, rankPointsDecrement: value }));
+    this.emit();
+  }
+
+  protected onRankMinPointsChange(value: number): void {
+    this.config.update((c) => ({ ...c, rankMinPoints: value }));
     this.emit();
   }
 

@@ -3,13 +3,16 @@ import { FormsModule } from '@angular/forms';
 
 interface PartnerGuessQuestionPayload {
   questionText: string;
+  /** Reformulation affichée au(x) devineur(s) en phase 2. Vide = reprend questionText tel quel (voir
+   * ResolveEffectivePayloadJsonAsync côté backend). */
+  guesserQuestionText: string;
   // Toujours vide à l'édition : la "bonne réponse" est fournie en direct par le joueur désigné comme
   // répondant (voir GameSession.CurrentAnswererPlayerId côté backend), jamais pré-écrite ici.
   acceptedAnswers: string[];
 }
 
 function defaultPayload(): PartnerGuessQuestionPayload {
-  return { questionText: '', acceptedAnswers: [] };
+  return { questionText: '', guesserQuestionText: '', acceptedAnswers: [] };
 }
 
 @Component({
@@ -37,7 +40,12 @@ export class PartnerGuessQuestionEditorComponent {
   }
 
   protected onQuestionTextChange(value: string): void {
-    this.payload.set({ questionText: value, acceptedAnswers: [] });
+    this.payload.update((p) => ({ ...p, questionText: value, acceptedAnswers: [] }));
+    this.payloadJsonChange.emit(JSON.stringify(this.payload()));
+  }
+
+  protected onGuesserQuestionTextChange(value: string): void {
+    this.payload.update((p) => ({ ...p, guesserQuestionText: value, acceptedAnswers: [] }));
     this.payloadJsonChange.emit(JSON.stringify(this.payload()));
   }
 }

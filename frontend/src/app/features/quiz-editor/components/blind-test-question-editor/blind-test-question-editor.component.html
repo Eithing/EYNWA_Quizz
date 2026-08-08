@@ -6,14 +6,25 @@
       <app-audio-player [audioUrl]="resolveAudioUrl(payload().audioUrl)" [showTimeline]="true" />
     }
 
-    <label class="blind-test-question-editor__upload">
-      <input type="file" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a" (change)="onFileSelected($event)" [disabled]="uploading()" />
-      <span>{{ uploading() ? 'Envoi en cours…' : payload().audioUrl ? "Changer le fichier" : 'Choisir un fichier audio' }}</span>
-    </label>
+    <app-media-upload-field
+      accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/x-m4a"
+      [hasFile]="!!payload().audioUrl"
+      chooseLabel="Choisir un fichier audio"
+      changeLabel="Changer le fichier"
+      errorMessage="Échec de l'envoi du fichier audio."
+      (uploaded)="onAudioUploaded($event)"
+    />
+  </div>
 
-    @if (uploadError(); as message) {
-      <p class="blind-test-question-editor__error">{{ message }}</p>
-    }
+  <div class="form-field">
+    <label for="blind-test-comment">Commentaire / consigne (optionnel)</label>
+    <textarea
+      id="blind-test-comment"
+      rows="2"
+      placeholder="Ex : Soyez précis"
+      [value]="payload().comment"
+      (input)="onCommentChange($any($event.target).value)"
+    ></textarea>
   </div>
 
   <div class="form-field">

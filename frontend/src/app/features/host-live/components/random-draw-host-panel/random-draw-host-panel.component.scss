@@ -1,0 +1,104 @@
+.host-live__tool-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.host-live__qa-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.host-live__qa-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.host-live__target-banner {
+  color: var(--accent);
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+
+.host-live__hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.host-live__tool-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+
+  li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    font-size: 0.85rem;
+  }
+}
+
+.host-live__tool-result--winner {
+  box-shadow: inset 3px 0 0 var(--success);
+}
+
+.host-live__tool-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+
+  select,
+  input[type='number'] {
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+  }
+
+  input[type='number'] {
+    width: 90px;
+  }
+}
+
+.host-live__score-adjust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+
+  input {
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+
+    &[type='number'] {
+      width: 90px;
+    }
+  }
+}
+
+.host-live__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin: 0;
+}

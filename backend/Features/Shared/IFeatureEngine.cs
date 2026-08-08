@@ -65,6 +65,14 @@ public interface IFeatureEngine
     int PointsForRank(string configJson, int correctAnswerRank) => 0;
 
     /// <summary>
+    /// Montant fixe à utiliser pour figer les points d'une réponse en attente de validation manuelle, quand
+    /// le mode de points effectif de la QUESTION l'exige (ex: "PerAnswer" — chaque réponse porte son propre
+    /// montant, qui ne dépend pas du temps/palier). Null par défaut (aucune feature n'a ce concept) : dans
+    /// ce cas le calcul habituel (temps écoulé / rang) s'applique normalement.
+    /// </summary>
+    int? FixedManualValidationPoints(string payloadJson, string configJson) => null;
+
+    /// <summary>
     /// Vrai pour une feature dont le classement ne peut être calculé qu'une fois la fenêtre de réponse
     /// fermée (ex: closest-guess — on ne sait qui est le plus proche qu'une fois toutes les estimations
     /// reçues). Dans ce cas, Evaluate() renvoie systématiquement (null, 0) sans déclencher la pause du

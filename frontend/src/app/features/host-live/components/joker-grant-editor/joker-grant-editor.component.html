@@ -1,0 +1,30 @@
+<p class="host-live__hint">
+  {{ jokerOwners().length === 0 ? "Aucun joueur n'a encore rejoint." : 'Charges par ' + (teams().length > 0 ? 'équipe' : 'joueur') + '.' }}
+</p>
+<div class="host-live__joker-editor">
+  @for (owner of jokerOwners(); track owner.kind + owner.id) {
+    <div class="host-live__joker-owner-row">
+      <strong>{{ owner.label }}</strong>
+      <div class="host-live__joker-owner-inputs">
+        @for (type of jokerTypes; track type) {
+          <label>
+            <span>{{ jokerIcons[type] }} {{ jokerLabels[type] }}</span>
+            <input
+              type="number"
+              min="0"
+              [value]="jokerDraftValue(owner, type)"
+              (input)="setJokerDraftValue(owner, type, $any($event.target).valueAsNumber || 0)"
+            />
+          </label>
+        }
+      </div>
+    </div>
+  }
+</div>
+<div class="host-live__team-builder-actions">
+  <div></div>
+  <div>
+    <button type="button" class="btn btn-secondary" (click)="cancel.emit()">Annuler</button>
+    <button type="button" class="btn btn-primary" (click)="submit()">Enregistrer les jokers</button>
+  </div>
+</div>

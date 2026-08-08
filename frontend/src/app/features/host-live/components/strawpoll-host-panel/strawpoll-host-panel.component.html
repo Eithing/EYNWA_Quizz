@@ -1,0 +1,49 @@
+@if (poll(); as p) {
+  <div class="host-live__tool-status">
+    <p class="host-live__qa-text">📊 {{ p.question }}</p>
+    <p class="host-live__hint">
+      {{ p.votedPlayerIds.length }} vote(s) reçu(s)
+      @if (p.concernedPlayerIds.length > 0) {
+        sur {{ p.concernedPlayerIds.length }} joueur(s) concerné(s)
+      }
+    </p>
+
+    @if (!p.resultsRevealed) {
+      <button type="button" class="btn btn-primary" (click)="reveal.emit()">Révéler les résultats</button>
+    } @else {
+      <ul class="host-live__tool-results">
+        @for (result of p.results ?? []; track result.optionId) {
+          <li>
+            <span>{{ optionText(p, result.optionId) }}</span>
+            <span>{{ result.voteCount }} vote(s)</span>
+          </li>
+        }
+      </ul>
+    }
+
+    <button type="button" class="btn btn-secondary" (click)="close.emit()">Fermer</button>
+  </div>
+} @else if (open()) {
+  <div class="host-live__tool-form">
+    <div class="form-field">
+      <label for="strawpoll-question">Question</label>
+      <input id="strawpoll-question" type="text" [value]="question()" (input)="question.set($any($event.target).value)" />
+    </div>
+
+    <div class="form-field">
+      <label for="strawpoll-options">Options (une par ligne)</label>
+      <textarea id="strawpoll-options" rows="4" [value]="optionsText()" (input)="optionsText.set($any($event.target).value)"></textarea>
+    </div>
+
+    <label class="host-live__checkbox">
+      <input type="checkbox" [checked]="allowMultiple()" (change)="allowMultiple.set($any($event.target).checked)" />
+      Autoriser plusieurs choix par joueur
+    </label>
+
+    @if (error(); as message) {
+      <p class="host-live__error">{{ message }}</p>
+    }
+
+    <app-participant-selector [players]="players()" [teams]="teams()" confirmLabel="Lancer le sondage" (confirm)="submitStart($event)" />
+  </div>
+}

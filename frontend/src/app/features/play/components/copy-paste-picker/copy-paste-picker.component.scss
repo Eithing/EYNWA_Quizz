@@ -1,0 +1,49 @@
+.play__tool-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  overflow-y: auto;
+
+  app-ui-card {
+    width: 100%;
+    max-width: 480px;
+  }
+}
+
+.play__question-text {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  padding: 24px 12px;
+}
+
+.play__hint {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 0;
+}
+
+.play__copy-paste-targets {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .btn {
+    width: 100%;
+  }
+}
+
+.play__error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}

@@ -46,7 +46,7 @@ public class ImageGuessEngine : QaEngine
         var (count, points) = BuildExpectedAnswerFields(payload.ExpectedAnswersOrLegacy(), ParseConfig(configJson).Points);
 
         return JsonSerializer.Serialize(
-            new { imageUrl = payload.ImageUrl, expectedAnswerCount = count, expectedAnswerPoints = points },
+            new { imageUrl = payload.ImageUrl, expectedAnswerCount = count, expectedAnswerPoints = points, comment = payload.Comment },
             PublicJsonOptions);
     }
 

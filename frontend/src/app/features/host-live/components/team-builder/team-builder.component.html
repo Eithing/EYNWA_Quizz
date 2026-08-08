@@ -1,0 +1,28 @@
+<div class="host-live__team-builder">
+  @for (draft of teamDrafts(); track $index; let draftIndex = $index) {
+    <div class="host-live__team-draft">
+      <input type="text" placeholder="Nom de l'équipe" [value]="draft.name" (input)="renameTeamDraft(draftIndex, $any($event.target).value)" />
+      <button type="button" class="host-live__edit-score-btn" title="Supprimer cette équipe" (click)="removeTeamDraft(draftIndex)">✕</button>
+      <div class="host-live__team-draft-players">
+        @for (player of players(); track player.id) {
+          <label [class.host-live__team-draft-player--disabled]="isPlayerTakenByOtherDraft(draftIndex, player.id)">
+            <input
+              type="checkbox"
+              [checked]="draft.playerIds.has(player.id)"
+              [disabled]="isPlayerTakenByOtherDraft(draftIndex, player.id)"
+              (change)="toggleDraftPlayer(draftIndex, player.id)"
+            />
+            {{ player.pseudo }}
+          </label>
+        }
+      </div>
+    </div>
+  }
+  <div class="host-live__team-builder-actions">
+    <button type="button" class="btn btn-secondary" (click)="addTeamDraft()">+ Ajouter une équipe</button>
+    <div>
+      <button type="button" class="btn btn-secondary" (click)="cancel.emit()">Annuler</button>
+      <button type="button" class="btn btn-primary" (click)="submit()">Enregistrer les équipes</button>
+    </div>
+  </div>
+</div>

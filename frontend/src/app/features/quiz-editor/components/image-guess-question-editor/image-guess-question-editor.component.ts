@@ -1,7 +1,9 @@
-import { Component, computed, effect, input, output, signal } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MediaService } from '../../../../core/services/media.service';
+import { MediaUploadFieldComponent } from '../../../../shared/components/media-upload-field/media-upload-field.component';
 import { ExpectedAnswerDraft, ExpectedAnswersEditorComponent } from '../expected-answers-editor/expected-answers-editor.component';
+import { PointsMode, roundPointsModeFrom, syncPayloadFromJson, toExpectedAnswers } from '../question-editor-payload.util';
 
 interface ImageGuessQuestionPayload {
   imageUrl: string;
@@ -10,25 +12,17 @@ interface ImageGuessQuestionPayload {
   expectedAnswers: ExpectedAnswerDraft[];
   /** Surcharge du mode de points de la manche pour CETTE question. Null = suit le réglage de la manche. */
   pointsModeOverride: 'Uniform' | 'PerAnswer' | null;
+  /** Commentaire/consigne optionnel affiché à côté de l'image (ex: "Donnez le nom de l'objet et du jeu"). */
+  comment: string;
 }
 
 function defaultPayload(): ImageGuessQuestionPayload {
-  return { imageUrl: '', acceptedAnswers: [], expectedAnswers: [], pointsModeOverride: null };
-}
-
-function toExpectedAnswers(payload: ImageGuessQuestionPayload): ExpectedAnswerDraft[] {
-  if (payload.expectedAnswers.length > 0) {
-    return payload.expectedAnswers;
-  }
-  if (payload.acceptedAnswers.length > 0) {
-    return [{ acceptedVariants: payload.acceptedAnswers, points: null }];
-  }
-  return [];
+  return { imageUrl: '', acceptedAnswers: [], expectedAnswers: [], pointsModeOverride: null, comment: '' };
 }
 
 @Component({
   selector: 'app-image-guess-question-editor',
-  imports: [FormsModule, ExpectedAnswersEditorComponent],
+  imports: [FormsModule, ExpectedAnswersEditorComponent, MediaUploadFieldComponent],
   templateUrl: './image-guess-question-editor.component.html',
   styleUrl: './image-guess-question-editor.component.scss'
 })
@@ -37,67 +31,31 @@ export class ImageGuessQuestionEditorComponent {
   readonly configJson = input<string>('{}');
   readonly payloadJsonChange = output<string>();
 
-  protected readonly payload = signal<ImageGuessQuestionPayload>(defaultPayload());
-  protected readonly uploading = signal(false);
-  protected readonly uploadError = signal<string | null>(null);
+  protected readonly payload = syncPayloadFromJson(this.payloadJson, defaultPayload, (parsed) => ({
+    ...parsed,
+    expectedAnswers: toExpectedAnswers(parsed)
+  }));
 
   /** Réglage par défaut de la manche (round-config), avant surcharge éventuelle par cette question. */
-  protected readonly roundPointsMode = computed<'Uniform' | 'PerAnswer'>(() => {
-    try {
-      const parsed = JSON.parse(this.configJson());
-      return parsed.pointsMode === 'PerAnswer' ? 'PerAnswer' : 'Uniform';
-    } catch {
-      return 'Uniform';
-    }
-  });
+  protected readonly roundPointsMode = computed<PointsMode>(() => roundPointsModeFrom(this.configJson()));
 
   /** Mode réellement appliqué à cette question : sa propre surcharge si renseignée, sinon celui de la manche. */
-  protected readonly effectivePointsMode = computed<'Uniform' | 'PerAnswer'>(
-    () => this.payload().pointsModeOverride ?? this.roundPointsMode()
-  );
+  protected readonly effectivePointsMode = computed<PointsMode>(() => this.payload().pointsModeOverride ?? this.roundPointsMode());
 
-  constructor(protected readonly mediaService: MediaService) {
-    effect(() => {
-      const parsed = this.parse(this.payloadJson());
-      this.payload.set({ ...parsed, expectedAnswers: toExpectedAnswers(parsed) });
-    });
-  }
-
-  private parse(json: string): ImageGuessQuestionPayload {
-    try {
-      return { ...defaultPayload(), ...JSON.parse(json) };
-    } catch {
-      return defaultPayload();
-    }
-  }
+  constructor(protected readonly mediaService: MediaService) {}
 
   private emit(): void {
     this.payloadJsonChange.emit(JSON.stringify(this.payload()));
   }
 
-  protected onFileSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) {
-      return;
-    }
+  protected onImageUploaded(url: string): void {
+    this.payload.update((p) => ({ ...p, imageUrl: url }));
+    this.emit();
+  }
 
-    this.uploading.set(true);
-    this.uploadError.set(null);
-
-    this.mediaService.upload(file).subscribe({
-      next: (response) => {
-        this.uploading.set(false);
-        this.payload.update((p) => ({ ...p, imageUrl: response.url }));
-        this.emit();
-      },
-      error: () => {
-        this.uploading.set(false);
-        this.uploadError.set("Échec de l'envoi de l'image.");
-      }
-    });
-
-    input.value = '';
+  protected onCommentChange(value: string): void {
+    this.payload.update((p) => ({ ...p, comment: value }));
+    this.emit();
   }
 
   protected onExpectedAnswersChange(expectedAnswers: ExpectedAnswerDraft[]): void {

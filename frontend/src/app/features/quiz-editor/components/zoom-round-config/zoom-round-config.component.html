@@ -91,6 +91,17 @@
           (input)="onRankPointsDecrementChange($any($event.target).valueAsNumber)"
         />
       </div>
+
+      <div class="form-field">
+        <label for="zoom-rank-min-points">Points minimum</label>
+        <input
+          id="zoom-rank-min-points"
+          type="number"
+          min="0"
+          [value]="config().rankMinPoints"
+          (input)="onRankMinPointsChange($any($event.target).valueAsNumber)"
+        />
+      </div>
     </div>
   }
 

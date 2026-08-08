@@ -45,7 +45,7 @@ public class BlindTestEngine : QaEngine
         var (count, points) = BuildExpectedAnswerFields(payload.ExpectedAnswersOrLegacy(), ParseConfig(configJson).Points);
 
         return JsonSerializer.Serialize(
-            new { audioUrl = payload.AudioUrl, expectedAnswerCount = count, expectedAnswerPoints = points },
+            new { audioUrl = payload.AudioUrl, expectedAnswerCount = count, expectedAnswerPoints = points, comment = payload.Comment },
             PublicJsonOptions);
     }
 

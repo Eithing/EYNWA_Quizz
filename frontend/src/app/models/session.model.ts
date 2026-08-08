@@ -279,6 +279,7 @@ export interface ZoomPublicPayload {
   /** Null en mode "points uniformes" (les points dépendent du palier de zoom courant, déjà affiché
    * ailleurs) — non-null seulement en mode "points personnalisés par réponse". */
   expectedAnswerPoints: number[] | null;
+  comment: string;
 }
 
 export interface QaPublicPayload {
@@ -291,12 +292,14 @@ export interface BlindTestPublicPayload {
   audioUrl: string;
   expectedAnswerCount: number;
   expectedAnswerPoints: number[] | null;
+  comment: string;
 }
 
 export interface ImageGuessPublicPayload {
   imageUrl: string;
   expectedAnswerCount: number;
   expectedAnswerPoints: number[] | null;
+  comment: string;
 }
 
 export interface ClosestGuessPublicPayload {
