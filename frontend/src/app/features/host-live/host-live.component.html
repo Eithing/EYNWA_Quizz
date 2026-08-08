@@ -49,6 +49,16 @@
             {{ s.teamScoringEnabled ? 'Désactiver le mode équipe' : 'Activer le mode équipe' }} (manche en cours)
           </button>
         }
+        @if (s.hasUndoSnapshot) {
+          <button
+            type="button"
+            class="btn btn-danger"
+            title="Annule la toute dernière action (Suivant / choix ou lancement de thème)"
+            (click)="undo()"
+          >
+            ↶ Annuler
+          </button>
+        }
       </div>
     </div>
 

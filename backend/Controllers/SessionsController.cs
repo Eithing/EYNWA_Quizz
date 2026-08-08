@@ -315,6 +315,8 @@ public partial class SessionsController(QuizPartyDbContext db, FeatureEngineRegi
             return BadRequest("La session n'est pas en cours.");
         }
 
+        await SaveUndoSnapshotAsync(session);
+
         // Action explicite du GM : autorisée à franchir la frontière d'une manche, y compris pour sortir
         // d'une manche à thèmes sans avoir joué tous les thèmes (contrairement à l'auto-advance, qui doit
         // toujours s'arrêter en fin de manche).
@@ -872,6 +874,8 @@ public partial class SessionsController(QuizPartyDbContext db, FeatureEngineRegi
             .Select(g => new JokerGrantDto(g.Id, g.Type.ToString(), g.PlayerId, g.TeamId, g.Charges))
             .ToListAsync();
 
+        var hasUndoSnapshot = await db.SessionUndoSnapshots.AnyAsync(s => s.SessionId == session.Id);
+
         return new GameSessionStateDto(
             session.Id, session.InviteToken, quiz.Title, session.Status,
             session.CurrentRoundIndex, session.CurrentQuestionIndex, topLevelRounds.Count, session.ScoreboardVisible,
@@ -880,7 +884,7 @@ public partial class SessionsController(QuizPartyDbContext db, FeatureEngineRegi
             session.CurrentAnswererPlayerId, answererPseudo, activeRandomDraw, activeStrawPoll,
             jokerGrants, session.AloneInTheWorldPlayerId, session.AloneInTheWorldTeamId,
             session.MeFirstHolderPlayerId, session.MeFirstHolderTeamId, session.MeFirstQuestionsRemaining,
-            session.MeFirstConsumedThisQuestion, session.CurrentThemeSubRoundId);
+            session.MeFirstConsumedThisQuestion, session.CurrentThemeSubRoundId, hasUndoSnapshot);
     }
 
     private async Task<PlayerDto> BuildPlayerDto(int playerId, int sessionId, string? pseudo)

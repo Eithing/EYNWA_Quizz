@@ -24,6 +24,7 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
     public DbSet<JokerUsageEvent> JokerUsageEvents => Set<JokerUsageEvent>();
     public DbSet<CopyPasteAssignment> CopyPasteAssignments => Set<CopyPasteAssignment>();
     public DbSet<QcmFiftyFiftyReveal> QcmFiftyFiftyReveals => Set<QcmFiftyFiftyReveal>();
+    public DbSet<SessionUndoSnapshot> SessionUndoSnapshots => Set<SessionUndoSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -343,6 +344,17 @@ public class QuizPartyDbContext(DbContextOptions<QuizPartyDbContext> options) : 
         // le même masquage déjà calculé plutôt que d'en tirer un nouveau (voir JokerService.UseFiftyFifty).
         modelBuilder.Entity<QcmFiftyFiftyReveal>()
             .HasIndex(r => new { r.QuestionId, r.PlayerId })
+            .IsUnique();
+
+        modelBuilder.Entity<SessionUndoSnapshot>()
+            .HasOne(s => s.Session)
+            .WithMany()
+            .HasForeignKey(s => s.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Une seule ligne par session : un seul niveau d'annulation (voir SessionUndoSnapshot).
+        modelBuilder.Entity<SessionUndoSnapshot>()
+            .HasIndex(s => s.SessionId)
             .IsUnique();
     }
 }

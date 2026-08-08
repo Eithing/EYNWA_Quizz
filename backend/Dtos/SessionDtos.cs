@@ -110,7 +110,10 @@ public record GameSessionStateDto(
     /// <summary>Sous-manche (thème) désignée par ChooseTheme, en attente de LaunchTheme — permet au
     /// frontend de savoir sans ambiguïté LEQUEL des thèmes révélés est réellement prêt à lancer (voir
     /// readyToLaunchTheme côté host-live.component.ts).</summary>
-    int? CurrentThemeSubRoundId = null);
+    int? CurrentThemeSubRoundId = null,
+    /// <summary>Vrai si un instantané annulable existe (voir SessionsController.Undo.cs) — pilote
+    /// l'affichage du bouton "Annuler" côté host.</summary>
+    bool HasUndoSnapshot = false);
 
 public record CurrentQuestionAdminDto(
     int RoundId,

@@ -173,6 +173,9 @@ export interface GameSessionState {
   meFirstConsumedThisQuestion: boolean;
   /** Sous-manche (thème) désignée par ChooseTheme, en attente de LaunchTheme. */
   currentThemeSubRoundId: number | null;
+  /** Vrai si la dernière action annulable (Next / ChooseTheme / LaunchTheme / SkipTheme) peut être
+   * défaite via /undo. */
+  hasUndoSnapshot: boolean;
 }
 
 export interface CurrentQuestionAdmin {

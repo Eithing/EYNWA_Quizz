@@ -454,6 +454,10 @@ export class HostLiveComponent implements OnInit, OnDestroy {
     this.sessionService.next(this.sessionId).subscribe((state) => this.applyState(state));
   }
 
+  protected undo(): void {
+    this.sessionService.undo(this.sessionId).subscribe((state) => this.applyState(state));
+  }
+
   protected toggleScoreboard(): void {
     const current = this.state()?.scoreboardVisible ?? false;
     this.sessionService.setScoreboardVisible(this.sessionId, !current).subscribe((state) => this.applyState(state));

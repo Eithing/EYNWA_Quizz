@@ -36,6 +36,8 @@ public partial class SessionsController
             return BadRequest("La session n'est pas sur un plateau de thèmes.");
         }
 
+        await SaveUndoSnapshotAsync(session);
+
         var topRound = TopLevelRounds(quiz).ElementAtOrDefault(session.CurrentRoundIndex);
         var subRound = topRound?.SubRounds.SingleOrDefault(sr => sr.Id == subRoundId);
         if (subRound is null)
@@ -91,6 +93,8 @@ public partial class SessionsController
             return BadRequest("Ce thème n'est pas en attente de lancement.");
         }
 
+        await SaveUndoSnapshotAsync(session);
+
         session.Status = GameSessionStatus.Running;
         session.CurrentQuestionStartedAt = DateTime.UtcNow;
 
@@ -121,6 +125,8 @@ public partial class SessionsController
         {
             return BadRequest("Ce thème a déjà été joué ou skippé.");
         }
+
+        await SaveUndoSnapshotAsync(session);
 
         themeState.Resolution = ThemeResolution.Skipped;
         themeState.IsRevealed = true;

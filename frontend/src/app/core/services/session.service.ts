@@ -48,6 +48,10 @@ export class SessionService {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/next`, {});
   }
 
+  undo(sessionId: number) {
+    return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/undo`, {});
+  }
+
   setScoreboardVisible(sessionId: number, visible: boolean) {
     return this.http.post<GameSessionState>(`${this.baseUrl}/${sessionId}/scoreboard`, { visible });
   }
